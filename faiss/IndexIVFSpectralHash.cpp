@@ -231,7 +231,7 @@ struct IVFScanner : InvertedListScanner {
               q(nbit),
               zero(nbit),
               qcode(index_in->code_size),
-              hc(qcode.data(), index_in->code_size) {
+              hc(qcode.data(), static_cast<int>(index_in->code_size)) {
         this->store_pairs = store_pairs_in;
         this->code_size = index->code_size;
         this->keep_max = is_similarity_metric(index->metric_type);
@@ -299,15 +299,6 @@ struct IVFScanner : InvertedListScanner {
     }
 };
 
-struct BuildScanner {
-    using T = InvertedListScanner*;
-
-    template <class HammingComputer>
-    static T f(const IndexIVFSpectralHash* index, bool store_pairs) {
-        return new IVFScanner<HammingComputer>(index, store_pairs);
-    }
-};
-
 } // anonymous namespace
 
 InvertedListScanner* IndexIVFSpectralHash::get_InvertedListScanner(
@@ -315,8 +306,10 @@ InvertedListScanner* IndexIVFSpectralHash::get_InvertedListScanner(
         const IDSelector* sel,
         const IVFSearchParameters*) const {
     FAISS_THROW_IF_NOT(!sel);
-    BuildScanner bs;
-    return dispatch_HammingComputer(code_size, bs, this, store_pairs);
+    return with_HammingComputer<SIMDLevel::NONE>(
+            code_size, [&]<class HammingComputer>() -> InvertedListScanner* {
+                return new IVFScanner<HammingComputer>(this, store_pairs);
+            });
 }
 
 void IndexIVFSpectralHash::replace_vt(VectorTransform* vt_in, bool own) {
