@@ -32,7 +32,7 @@ IndexPQ::IndexPQ(int d_in, size_t M, size_t nbits, MetricType metric)
         : IndexFlatCodes(0, d_in, metric), pq(d_in, M, nbits) {
     is_trained = false;
     do_polysemous_training = false;
-    polysemous_ht = nbits * M + 1;
+    polysemous_ht = static_cast<int>(nbits * M) + 1;
     search_type = ST_PQ;
     encode_signs = false;
     code_size = pq.code_size;
@@ -42,7 +42,7 @@ IndexPQ::IndexPQ() {
     metric_type = METRIC_L2;
     is_trained = false;
     do_polysemous_training = false;
-    polysemous_ht = pq.nbits * pq.M + 1;
+    polysemous_ht = static_cast<int>(pq.nbits * pq.M) + 1;
     search_type = ST_PQ;
     encode_signs = false;
 }
@@ -299,7 +299,7 @@ size_t polysemous_inner_loop(
 
     size_t n_pass_i = 0;
 
-    HammingComputer hc(q_code, code_size);
+    HammingComputer hc(q_code, static_cast<int>(code_size));
 
     for (int64_t bi = 0; bi < static_cast<int64_t>(ntotal); bi++) {
         int hd = hc.hamming(b_code);
@@ -323,14 +323,6 @@ size_t polysemous_inner_loop(
     return n_pass_i;
 }
 
-struct Run_polysemous_inner_loop {
-    using T = size_t;
-    template <class HammingComputer, class... Types>
-    size_t f(Types... args) {
-        return polysemous_inner_loop<HammingComputer>(args...);
-    }
-};
-
 } // anonymous namespace
 
 void IndexPQ::search_core_polysemous(
@@ -345,7 +337,7 @@ void IndexPQ::search_core_polysemous(
     FAISS_THROW_IF_NOT(pq.nbits == 8);
 
     if (param_polysemous_ht == 0) {
-        param_polysemous_ht = pq.nbits * pq.M + 1;
+        param_polysemous_ht = static_cast<int>(pq.nbits * pq.M) + 1;
     }
 
     // PQ distance tables
@@ -381,37 +373,39 @@ void IndexPQ::search_core_polysemous(
         maxheap_heapify(k, heap_dis, heap_ids);
 
         if (!generalized_hamming) {
-            Run_polysemous_inner_loop r;
-            n_pass += dispatch_HammingComputer(
-                    pq.code_size,
-                    r,
-                    this,
-                    dis_table_qi,
-                    q_code,
-                    k,
-                    heap_dis,
-                    heap_ids,
-                    param_polysemous_ht);
+            n_pass += with_HammingComputer<SIMDLevel::NONE>(
+                    pq.code_size, [&]<class HammingComputer>() -> size_t {
+                        return polysemous_inner_loop<HammingComputer>(
+                                this,
+                                dis_table_qi,
+                                q_code,
+                                k,
+                                heap_dis,
+                                heap_ids,
+                                param_polysemous_ht);
+                    });
 
         } else { // generalized hamming
             switch (pq.code_size) {
-#define DISPATCH(cs)                                             \
-    case cs:                                                     \
-        n_pass += polysemous_inner_loop<GenHammingComputer##cs>( \
-                this,                                            \
-                dis_table_qi,                                    \
-                q_code,                                          \
-                k,                                               \
-                heap_dis,                                        \
-                heap_ids,                                        \
-                param_polysemous_ht);                            \
+#define DISPATCH(cs)                                            \
+    case cs:                                                    \
+        n_pass += polysemous_inner_loop<                        \
+                GenHammingComputer##cs##_tpl<SIMDLevel::NONE>>( \
+                this,                                           \
+                dis_table_qi,                                   \
+                q_code,                                         \
+                k,                                              \
+                heap_dis,                                       \
+                heap_ids,                                       \
+                param_polysemous_ht);                           \
         break;
                 DISPATCH(8)
                 DISPATCH(16)
                 DISPATCH(32)
                 default:
                     if (pq.code_size % 8 == 0) {
-                        n_pass += polysemous_inner_loop<GenHammingComputerM8>(
+                        n_pass += polysemous_inner_loop<
+                                GenHammingComputerM8_tpl<SIMDLevel::NONE>>(
                                 this,
                                 dis_table_qi,
                                 q_code,
@@ -487,7 +481,7 @@ void IndexPQ::hamming_distance_histogram(
         nb = ntotal;
         b_codes = codes.data();
     }
-    int nbits = pq.M * pq.nbits;
+    int nbits = static_cast<int>(pq.M * pq.nbits);
     memset(hist, 0, sizeof(*hist) * (nbits + 1));
     size_t bs = 256;
 
@@ -947,7 +941,7 @@ void MultiIndexQuantizer::search(
         // simple version that just finds the min in each table
 
 #pragma omp parallel for
-        for (int i = 0; i < n; i++) {
+        for (idx_t i = 0; i < n; i++) {
             const float* dis_table = dis_tables.get() + i * pq.ksub * pq.M;
             float dis = 0;
             idx_t label = 0;
@@ -975,9 +969,12 @@ void MultiIndexQuantizer::search(
 #pragma omp parallel if (n > 1)
         {
             MinSumK<float, SemiSortedArray<float>, false> msk(
-                    k, pq.M, pq.nbits, pq.ksub);
+                    static_cast<int>(k),
+                    static_cast<int>(pq.M),
+                    static_cast<int>(pq.nbits),
+                    static_cast<int>(pq.ksub));
 #pragma omp for
-            for (int i = 0; i < n; i++) {
+            for (idx_t i = 0; i < n; i++) {
                 msk.run(dis_tables.get() + i * pq.ksub * pq.M,
                         pq.ksub,
                         distances + i * k,
@@ -1067,7 +1064,7 @@ void MultiIndexQuantizer2::search(
         return;
     }
 
-    int k2 = std::min(K, int64_t(pq.ksub));
+    int k2 = static_cast<int>(std::min(K, int64_t(pq.ksub)));
     FAISS_THROW_IF_NOT(k2);
 
     int64_t M = pq.M;
@@ -1113,7 +1110,10 @@ void MultiIndexQuantizer2::search(
 #pragma omp parallel if (n > 1)
         {
             MinSumK<float, PreSortedArray<float>, false> msk(
-                    K, pq.M, pq.nbits, k2);
+                    static_cast<int>(K),
+                    static_cast<int>(pq.M),
+                    static_cast<int>(pq.nbits),
+                    k2);
 #pragma omp for
             for (idx_t i = 0; i < n; i++) {
                 idx_t* li = labels + i * K;
@@ -1129,7 +1129,7 @@ void MultiIndexQuantizer2::search(
                     const idx_t* idmap = idmap0;
                     int64_t vin = li[k];
                     int64_t vout = 0;
-                    int bs = 0;
+                    size_t bs = 0;
                     for (int64_t m = 0; m < M; m++) {
                         int64_t s = vin & mask1;
                         vin >>= pq.nbits;

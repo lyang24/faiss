@@ -15,6 +15,7 @@ set(FAISS_SIMD_AVX2_SRC
   impl/scalar_quantizer/sq-avx2.cpp
   impl/approx_topk/avx2.cpp
   utils/simd_impl/distances_avx2.cpp
+  utils/hamming_distance/hamming_avx2.cpp
   utils/simd_impl/partitioning_avx2.cpp
   utils/distances_fused/simdlib_based.cpp
   utils/simd_impl/rabitq_avx2.cpp
@@ -26,6 +27,7 @@ set(FAISS_SIMD_AVX512_SRC
   impl/scalar_quantizer/sq-avx512.cpp
   utils/simd_impl/distances_avx512.cpp
   utils/distances_fused/avx512.cpp
+  utils/hamming_distance/hamming_avx512.cpp
   utils/simd_impl/rabitq_avx512.cpp
 )
 set(FAISS_SIMD_NEON_SRC
@@ -33,6 +35,7 @@ set(FAISS_SIMD_NEON_SRC
   impl/scalar_quantizer/sq-neon.cpp
   impl/approx_topk/neon.cpp
   utils/simd_impl/distances_aarch64.cpp
+  utils/hamming_distance/hamming_neon.cpp
   utils/simd_impl/partitioning_neon.cpp
   utils/distances_fused/simdlib_based_neon.cpp
   utils/simd_impl/rabitq_neon.cpp
@@ -112,6 +115,7 @@ set(FAISS_SRC
   impl/IDSelector.cpp
   impl/FaissException.cpp
   impl/HNSW.cpp
+  impl/hnsw/LockVector.cpp
   impl/hnsw/MinimaxHeap.cpp
   impl/NSG.cpp
   impl/PolysemousTraining.cpp
@@ -237,6 +241,7 @@ set(FAISS_HEADERS
   impl/FaissAssert.h
   impl/FaissException.h
   impl/HNSW.h
+  impl/hnsw/LockVector.h
   impl/hnsw/MinimaxHeap.h
   impl/LocalSearchQuantizer.h
   impl/ProductAdditiveQuantizer.h
@@ -275,6 +280,7 @@ set(FAISS_HEADERS
   impl/lattice_Zn.h
   impl/platform_macros.h
   impl/fast_scan/accumulate_loops.h
+  impl/fast_scan/accumulate_loops_512.h
   impl/fast_scan/dispatching.h
   impl/fast_scan/fast_scan.h
   impl/fast_scan/decompose_qbs.h
@@ -333,13 +339,14 @@ set(FAISS_HEADERS
   utils/transpose/transpose-avx2-inl.h
   utils/transpose/transpose-avx512-inl.h
   utils/hamming_distance/common.h
-  utils/hamming_distance/generic-inl.h
-  utils/hamming_distance/hamdis-inl.h
-  utils/hamming_distance/neon-inl.h
-  utils/hamming_distance/avx2-inl.h
-  utils/hamming_distance/avx512-inl.h
+  utils/hamming_distance/hamming_computer.h
+  utils/hamming_distance/hamming_computer-avx2.h
+  utils/hamming_distance/hamming_computer-avx512.h
+  utils/hamming_distance/hamming_computer-generic.h
+  utils/hamming_distance/hamming_computer-neon.h
   utils/simd_impl/distances_autovec-inl.h
   utils/simd_impl/distances_simdlib256.h
+  utils/hamming_distance/hamming_impl.h
   utils/simd_impl/exhaustive_L2sqr_blas_cmax.h
   utils/simd_impl/IVFFlatScanner-inl.h
   utils/simd_impl/distances_sse-inl.h
@@ -362,6 +369,15 @@ endif()
 # Export FAISS_HEADERS variable to parent scope.
 set(FAISS_HEADERS ${FAISS_HEADERS} PARENT_SCOPE)
 
+# Detect BMI2 compiler support.
+include(CheckCXXCompilerFlag)
+check_cxx_compiler_flag("-mbmi2" COMPILER_SUPPORTS_BMI2)
+if(COMPILER_SUPPORTS_BMI2)
+  set(FAISS_BMI2_FLAGS "-mbmi2")
+else()
+  set(FAISS_BMI2_FLAGS "")
+endif()
+
 add_library(faiss ${FAISS_SRC})
 
 add_library(faiss_avx2 ${FAISS_SRC})
@@ -369,7 +385,7 @@ if(NOT FAISS_OPT_LEVEL STREQUAL "avx2" AND NOT FAISS_OPT_LEVEL STREQUAL "avx512"
   set_target_properties(faiss_avx2 PROPERTIES EXCLUDE_FROM_ALL TRUE)
 endif()
 if(NOT WIN32)
-  target_compile_options(faiss_avx2 PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-mavx2 -mfma -mf16c -mpopcnt>)
+  target_compile_options(faiss_avx2 PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-mavx2 -mfma -mf16c -mpopcnt ${FAISS_BMI2_FLAGS}>)
 else()
   # MSVC enables FMA with /arch:AVX2; no separate flags for F16C, POPCNT
   # Ref. FMA (under /arch:AVX2): https://docs.microsoft.com/en-us/cpp/build/reference/arch-x64
@@ -389,7 +405,7 @@ endif()
 if(NOT WIN32)
   # All modern CPUs support F, CD, VL, DQ, BW extensions.
   # Ref: https://en.wikipedia.org/wiki/AVX512
-  target_compile_options(faiss_avx512 PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-mavx2 -mfma -mf16c -mavx512f -mavx512cd -mavx512vl -mavx512dq -mavx512bw -mpopcnt>)
+  target_compile_options(faiss_avx512 PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-mavx2 -mfma -mf16c -mavx512f -mavx512cd -mavx512vl -mavx512dq -mavx512bw -mpopcnt ${FAISS_BMI2_FLAGS}>)
 else()
   target_compile_options(faiss_avx512 PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/arch:AVX512>)
   # we need bigobj for the swig wrapper
@@ -405,7 +421,7 @@ endif()
 if(NOT WIN32)
   # Architecture mode to support AVX512 extensions available since Intel(R) Sapphire Rapids.
   # Ref: https://networkbuilders.intel.com/solutionslibrary/intel-avx-512-fp16-instruction-set-for-intel-xeon-processor-based-products-technology-guide
-  target_compile_options(faiss_avx512_spr PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-mavx2 -mfma -mf16c -mavx512f -mavx512cd -mavx512vl -mavx512dq -mavx512bw -mavx512vpopcntdq -mpopcnt -mavx512fp16 -mavx512bf16>)
+  target_compile_options(faiss_avx512_spr PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-mavx2 -mfma -mf16c -mavx512f -mavx512cd -mavx512vl -mavx512dq -mavx512bw -mavx512vpopcntdq -mpopcnt -mavx512fp16 -mavx512bf16 ${FAISS_BMI2_FLAGS}>)
 else()
   target_compile_options(faiss_avx512_spr PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/arch:AVX512>)
   # we need bigobj for the swig wrapper
@@ -450,16 +466,16 @@ target_compile_definitions(faiss_sve PRIVATE COMPILE_SIMD_ARM_NEON COMPILE_SIMD_
 if(FAISS_OPT_LEVEL STREQUAL "dd")
   # Add SIMD source files to main faiss target for DD builds
   target_sources(faiss PRIVATE ${FAISS_SIMD_SRC})
-  if(NOT WIN32)
-    target_compile_definitions(faiss PRIVATE FAISS_ENABLE_DD)
-    # Architecture-specific SIMD definitions for Dynamic Dispatch
-    if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86_64|amd64|AMD64)")
-      target_compile_definitions(faiss PRIVATE
-        COMPILE_SIMD_AVX2 COMPILE_SIMD_AVX512 COMPILE_SIMD_AVX512_SPR)
+  target_compile_definitions(faiss PRIVATE FAISS_ENABLE_DD)
+  # Architecture-specific SIMD definitions for Dynamic Dispatch
+  if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86_64|amd64|AMD64)")
+    target_compile_definitions(faiss PRIVATE
+      COMPILE_SIMD_AVX2 COMPILE_SIMD_AVX512 COMPILE_SIMD_AVX512_SPR)
+    if(NOT WIN32)
       # Baseline flags for common files (prevents auto-vectorization)
       target_compile_options(faiss PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:-mpopcnt -msse4 -mno-avx -mno-avx2>)
-      # Per-file SIMD flags
+      # Per-file SIMD flags (GCC/Clang)
       set_source_files_properties(${FAISS_SIMD_AVX2_SRC}
         TARGET_DIRECTORY faiss
         PROPERTIES COMPILE_OPTIONS "-mavx2;-mfma;-mf16c;-mpopcnt"
@@ -469,15 +485,26 @@ if(FAISS_OPT_LEVEL STREQUAL "dd")
         PROPERTIES COMPILE_OPTIONS
           "-mavx512f;-mavx512cd;-mavx512vl;-mavx512dq;-mavx512bw;-mfma;-mf16c;-mpopcnt"
       )
-    elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "(aarch64|arm64|ARM64)")
-      # ARM NEON is always available on aarch64, no special compiler flags needed
-      target_compile_definitions(faiss PRIVATE COMPILE_SIMD_ARM_NEON COMPILE_SIMD_ARM_SVE)
-      # Per-file SVE flags (NEON needs no flags on aarch64)
-      set_source_files_properties(${FAISS_SIMD_SVE_SRC}
+    else()
+      # Per-file SIMD flags (MSVC)
+      add_compile_options(/bigobj)
+      set_source_files_properties(${FAISS_SIMD_AVX2_SRC}
         TARGET_DIRECTORY faiss
-        PROPERTIES COMPILE_OPTIONS "-march=armv8.2-a+sve"
+        PROPERTIES COMPILE_OPTIONS "/arch:AVX2"
+      )
+      set_source_files_properties(${FAISS_SIMD_AVX512_SRC}
+        TARGET_DIRECTORY faiss
+        PROPERTIES COMPILE_OPTIONS "/arch:AVX512"
       )
     endif()
+  elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "(aarch64|arm64|ARM64)")
+    # ARM NEON is always available on aarch64, no special compiler flags needed
+    target_compile_definitions(faiss PRIVATE COMPILE_SIMD_ARM_NEON COMPILE_SIMD_ARM_SVE)
+    # Per-file SVE flags (NEON needs no flags on aarch64)
+    set_source_files_properties(${FAISS_SIMD_SVE_SRC}
+      TARGET_DIRECTORY faiss
+      PROPERTIES COMPILE_OPTIONS "-march=armv8.2-a+sve"
+    )
   endif()
 endif()
 
