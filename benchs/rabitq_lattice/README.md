@@ -129,3 +129,51 @@ python3 benchs/rabitq_lattice/bench_e8_books.py \
   --books lex15 sym256 zero_axis15 --rotate qr --seed 12345 \
   --out /home/ubuntu/e8_results/gist_center_qr.csv
 ```
+
+## Residual-Domain IVF Harness
+
+`bench_e8_residuals.py` is the go/no-go harness for the lattice idea. It trains
+an IVF coarse quantizer, assigns database vectors to centroids, encodes the
+residual `x - centroid`, and searches only the query's `nprobe` coarse lists.
+It reports:
+
+- `ivf_exact`: exact scoring over the same probed IVF candidates, i.e. the
+  coarse-search recall ceiling.
+- `sign`: matched-rate 1-bit RaBitQ residual baseline.
+- selected E8 books, usually `sym256` plus compatibility baselines.
+
+Local smoke:
+
+```bash
+python3 benchs/rabitq_lattice/bench_e8_residuals.py \
+  --dataset /tmp/rabitq_lattice_synth_ip.npz --metric ip \
+  --nb 2000 --nq 20 --chunk 500 --k 100 \
+  --nlist 32 --nprobe 4 --kmeans-train 1500 --kmeans-iter 3 \
+  --books lex15 sym256 zero_axis15 --rotate qr --seed 7 \
+  --out /tmp/rabitq_lattice_residual_synth.csv
+```
+
+Remote production-like templates:
+
+```bash
+python3 benchs/rabitq_lattice/bench_e8_residuals.py \
+  --dataset /home/ubuntu/data/cohere-wiki-1024-ip.hdf5 --metric ip \
+  --nb 1000000 --nq 100 --chunk 5000 --k 100 \
+  --nlist 1024 --nprobe 64 --kmeans-train 100000 --kmeans-iter 20 \
+  --books lex15 sym256 zero_axis15 --rotate qr --seed 12345 \
+  --out /home/ubuntu/e8_results/cohere_residual_qr.csv
+
+python3 benchs/rabitq_lattice/bench_e8_residuals.py \
+  --dataset /home/ubuntu/data/deep-image-96-angular.hdf5 --metric ip --normalize \
+  --nb 1000000 --nq 100 --chunk 10000 --k 100 \
+  --nlist 1024 --nprobe 64 --kmeans-train 100000 --kmeans-iter 20 \
+  --books lex15 sym256 zero_axis15 --rotate qr --seed 12345 \
+  --out /home/ubuntu/e8_results/deep_residual_qr.csv
+
+python3 benchs/rabitq_lattice/bench_e8_residuals.py \
+  --dataset /home/ubuntu/data/dbpedia-openai3-small-1536-angular-100k.hdf5 \
+  --metric ip --nb 99000 --nq 1000 --chunk 3000 --k 100 \
+  --nlist 1024 --nprobe 64 --kmeans-train 99000 --kmeans-iter 20 \
+  --books lex15 sym256 zero_axis15 --rotate qr --seed 12345 \
+  --out /home/ubuntu/e8_results/openai_residual_qr.csv
+```
