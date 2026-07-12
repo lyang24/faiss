@@ -5,6 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <faiss/IndexFlat.h>
+#include <faiss/IndexIVFRaBitQLattice.h>
 #include <faiss/IndexRaBitQLattice.h>
 #include <faiss/impl/RaBitQLatticeCodebook.h>
 
@@ -274,4 +276,66 @@ TEST(IndexRaBitQLattice, SearchFindsSelfForInnerProductAndL2) {
         EXPECT_EQ(label, 0);
         EXPECT_NEAR(dis, 0.0f, 1e-4f);
     }
+}
+
+TEST(IndexIVFRaBitQLattice, SearchSmoke) {
+    constexpr int d = 32;
+    constexpr int nb = 1000;
+    constexpr int nq = 10;
+    constexpr int nlist = 16;
+    constexpr int k = 10;
+
+    std::mt19937 rng(123);
+    std::normal_distribution<float> normal;
+    std::vector<float> xb(nb * d);
+    std::vector<float> xq(nq * d);
+    for (float& v : xb) {
+        v = normal(rng);
+    }
+    for (float& v : xq) {
+        v = normal(rng);
+    }
+
+    faiss::IndexFlatIP coarse(d);
+    faiss::IndexIVFRaBitQLattice index(
+            &coarse,
+            d,
+            nlist,
+            faiss::METRIC_INNER_PRODUCT,
+            faiss::rabitq_lattice::LatticeBook::E8_SYM256,
+            true);
+    index.cp.niter = 3;
+    index.nprobe = 4;
+    index.train(nb, xb.data());
+    index.add(nb, xb.data());
+
+    std::vector<float> dis(nq * k);
+    std::vector<faiss::idx_t> labels(nq * k);
+    index.search(nq, xq.data(), k, dis.data(), labels.data());
+
+    size_t valid = 0;
+    for (faiss::idx_t id : labels) {
+        valid += id >= 0 ? 1 : 0;
+    }
+    EXPECT_GT(valid, 0);
+
+    faiss::IndexFlatL2 coarse_l2(d);
+    faiss::IndexIVFRaBitQLattice index_l2(
+            &coarse_l2,
+            d,
+            nlist,
+            faiss::METRIC_L2,
+            faiss::rabitq_lattice::LatticeBook::E8_SYM256,
+            true);
+    index_l2.cp.niter = 3;
+    index_l2.nprobe = nlist;
+    index_l2.train(nb, xb.data());
+    index_l2.add(nb, xb.data());
+
+    std::vector<float> l2_dis(k);
+    std::vector<faiss::idx_t> l2_labels(k);
+    index_l2.search(1, xb.data(), k, l2_dis.data(), l2_labels.data());
+    EXPECT_EQ(l2_labels[0], 0);
+    EXPECT_GE(l2_dis[0], 0.0f);
+    EXPECT_NEAR(l2_dis[0], 0.0f, 1e-4f);
 }
