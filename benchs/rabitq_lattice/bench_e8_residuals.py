@@ -32,14 +32,11 @@ from bench_e8_books import (
 from codebooks import BOOK_NAMES, make_codebook
 
 
-def require_faiss():
+def try_import_faiss():
     try:
         import faiss  # type: ignore
     except ImportError as exc:  # pragma: no cover - depends on local env.
-        raise RuntimeError(
-            "bench_e8_residuals.py requires the FAISS Python module for "
-            "kmeans and coarse assignment"
-        ) from exc
+        return None
     return faiss
 
 
@@ -50,30 +47,99 @@ def train_coarse_quantizer(
     seed: int,
     verbose: bool,
 ) -> np.ndarray:
-    faiss = require_faiss()
-    km = faiss.Kmeans(
-        xt.shape[1],
-        nlist,
-        niter=niter,
-        seed=seed,
-        verbose=verbose,
-        spherical=False,
-        gpu=False,
+    rng = np.random.default_rng(seed)
+    faiss = try_import_faiss()
+    if faiss is not None:
+        km = faiss.Kmeans(
+            xt.shape[1],
+            nlist,
+            niter=niter,
+            seed=seed,
+            verbose=verbose,
+            spherical=False,
+            gpu=False,
+        )
+        km.train(np.ascontiguousarray(xt, dtype=np.float32))
+        return np.ascontiguousarray(km.centroids, dtype=np.float32)
+
+    if xt.shape[0] < nlist:
+        raise ValueError(f"kmeans_train={xt.shape[0]} must be >= nlist={nlist}")
+    init = np.ascontiguousarray(
+        xt[rng.choice(xt.shape[0], size=nlist, replace=False)], dtype=np.float32
     )
-    km.train(np.ascontiguousarray(xt, dtype=np.float32))
-    return np.ascontiguousarray(km.centroids, dtype=np.float32)
+    try:
+        from scipy.cluster.vq import kmeans2  # type: ignore
+
+        centroids, _ = kmeans2(
+            np.ascontiguousarray(xt, dtype=np.float32),
+            init,
+            iter=niter,
+            minit="matrix",
+            missing="warn",
+            check_finite=False,
+        )
+        return np.ascontiguousarray(centroids, dtype=np.float32)
+    except Exception as exc:
+        if verbose:
+            print(json.dumps({"kmeans_backend": "numpy", "scipy_error": repr(exc)}))
+
+    centroids = np.ascontiguousarray(
+        init, dtype=np.float32
+    )
+    for it in range(niter):
+        labels = assign_numpy(centroids, xt, 1, chunk=2048).reshape(-1)
+        counts = np.bincount(labels, minlength=nlist).astype(np.float64)
+        sums = np.zeros((nlist, xt.shape[1]), dtype=np.float64)
+        np.add.at(sums, labels, xt.astype(np.float64, copy=False))
+        nonempty = counts > 0
+        centroids[nonempty] = (sums[nonempty] / counts[nonempty, None]).astype(
+            np.float32
+        )
+        empty = np.where(~nonempty)[0]
+        if empty.size:
+            centroids[empty] = xt[
+                rng.choice(xt.shape[0], size=empty.size, replace=True)
+            ]
+        if verbose:
+            print(json.dumps({"kmeans_iter": it + 1, "empty": int(empty.size)}))
+    return np.ascontiguousarray(centroids, dtype=np.float32)
 
 
 def make_l2_index(x: np.ndarray):
-    faiss = require_faiss()
+    faiss = try_import_faiss()
+    if faiss is None:
+        return np.ascontiguousarray(x, dtype=np.float32)
     index = faiss.IndexFlatL2(x.shape[1])
     index.add(np.ascontiguousarray(x, dtype=np.float32))
     return index
 
 
 def assign_centroids(index, x: np.ndarray, k: int) -> np.ndarray:
+    if isinstance(index, np.ndarray):
+        return assign_numpy(index, x, k, chunk=2048)
     _, ids = index.search(np.ascontiguousarray(x, dtype=np.float32), k)
     return np.asarray(ids, dtype=np.int64)
+
+
+def assign_numpy(
+    centroids: np.ndarray,
+    x: np.ndarray,
+    k: int,
+    chunk: int,
+) -> np.ndarray:
+    ids_out = np.empty((x.shape[0], k), dtype=np.int64)
+    c_norm2 = np.sum(centroids * centroids, axis=1).astype(np.float32)
+    for i0 in range(0, x.shape[0], chunk):
+        xb = np.ascontiguousarray(x[i0 : i0 + chunk], dtype=np.float32)
+        scores = -2.0 * (xb @ centroids.T)
+        scores += np.sum(xb * xb, axis=1)[:, None]
+        scores += c_norm2[None, :]
+        kk = min(k, centroids.shape[0])
+        part = np.argpartition(scores, kk - 1, axis=1)[:, :kk]
+        vals = np.take_along_axis(scores, part, axis=1)
+        order = np.argsort(vals, axis=1)
+        ids_out[i0 : i0 + xb.shape[0]] = np.take_along_axis(part, order, axis=1)
+    return ids_out
 
 
 def masked_merge_topk(
