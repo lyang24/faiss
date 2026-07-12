@@ -18,6 +18,12 @@ constexpr size_t kE8Finite256Size = 256;
 
 using E8Chunk = std::array<float, kE8ChunkDim>;
 
+enum class LatticeBook {
+    E8_LEX15 = 0,
+    E8_SYM256 = 1,
+    E8_ZERO_AXIS15 = 2,
+};
+
 struct DirectionEncodingStats {
     float norm = 0.0f;
     float decoded_norm = 0.0f;
@@ -36,9 +42,30 @@ struct DirectionEncodingStats {
  */
 const std::array<E8Chunk, kE8Finite256Size>& e8_finite_256_wide_codebook();
 
+const std::array<E8Chunk, kE8Finite256Size>& e8_lattice_codebook(
+        LatticeBook book);
+
+uint64_t e8_lattice_codebook_checksum(LatticeBook book);
+
 uint8_t encode_e8_finite_256_wide(const float* chunk8);
 
+uint8_t encode_e8_lattice_book(const float* chunk8, LatticeBook book);
+
+uint8_t encode_e8_lattice_book_fast(
+        const float* chunk8,
+        LatticeBook book,
+        bool* used_fast_path = nullptr);
+
+uint8_t encode_e8_lattice_book_shell(const float* chunk8, LatticeBook book);
+
+float e8_lattice_codeword_l2sqr(
+        const float* chunk8,
+        uint8_t code,
+        LatticeBook book);
+
 void decode_e8_finite_256_wide(uint8_t code, float* chunk8);
+
+void decode_e8_lattice_book(uint8_t code, LatticeBook book, float* chunk8);
 
 /**
  * Encode a residual vector as finite-E8-wide 8D chunks and optionally write the
@@ -58,6 +85,13 @@ void decode_e8_finite_256_wide(uint8_t code, float* chunk8);
 DirectionEncodingStats encode_e8_finite_256_wide_direction(
         const float* residual,
         size_t d,
+        uint8_t* codes,
+        float* decoded_unit = nullptr);
+
+DirectionEncodingStats encode_e8_lattice_book_direction(
+        const float* residual,
+        size_t d,
+        LatticeBook book,
         uint8_t* codes,
         float* decoded_unit = nullptr);
 
