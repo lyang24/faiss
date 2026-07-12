@@ -177,3 +177,35 @@ python3 benchs/rabitq_lattice/bench_e8_residuals.py \
   --books lex15 sym256 zero_axis15 --rotate qr --seed 12345 \
   --out /home/ubuntu/e8_results/openai_residual_qr.csv
 ```
+
+## C++ IVF Prototype Bench
+
+After the Python residual harness passes, use `bench_ivf_lattice.cpp` to compare
+the real C++ `IndexIVFRaBitQ` baseline against the experimental
+`IndexIVFRaBitQLattice` scanner. The exporter writes a small binary format:
+
+```text
+int64 nb, nq, d, k
+float32 xb[nb][d]
+float32 xq[nq][d]
+int64 gt[nq][k]
+```
+
+Example:
+
+```bash
+python3 benchs/rabitq_lattice/export_hdf5_for_cpp.py \
+  --dataset /home/ubuntu/data/cohere-wiki-1024-ip.hdf5 \
+  --out /home/ubuntu/e8_results/cohere1m_qr_cpp.bin \
+  --nb 1000000 --nq 100 --k 100 --rotate qr --seed 12345
+
+g++ -std=c++20 -O3 -I. -Ibuild_avx2 \
+  benchs/rabitq_lattice/bench_ivf_lattice.cpp \
+  build_avx2/faiss/libfaiss.a -fopenmp -lblas -llapack \
+  -o /tmp/bench_ivf_lattice
+
+OMP_NUM_THREADS=1 /tmp/bench_ivf_lattice \
+  --data /home/ubuntu/e8_results/cohere1m_qr_cpp.bin \
+  --nlist 1024 --nprobe 64 --k 100 \
+  --ntrain 50000 --niter 8 --rounds 3 --threads 1
+```
