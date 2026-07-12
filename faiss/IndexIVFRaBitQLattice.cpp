@@ -27,6 +27,7 @@ using rabitq_lattice::LatticeBook;
 struct LatticeFactors {
     float norm = 0.0f;
     float dp_multiplier = 0.0f;
+    float adjusted_norm2 = 0.0f;
 };
 
 size_t e8_num_chunks(idx_t d) {
@@ -127,6 +128,7 @@ struct IVFRaBitQLatticeScanner : InvertedListScanner {
     std::vector<float> centroid;
     std::vector<float> query_minus_centroid;
     float query_dot_centroid = 0.0f;
+    float query_norm2 = 0.0f;
     float query_minus_centroid_norm2 = 0.0f;
 
     IVFRaBitQLatticeScanner(
@@ -146,6 +148,7 @@ struct IVFRaBitQLatticeScanner : InvertedListScanner {
 
     void set_query(const float* query_vector) override {
         query = query_vector;
+        query_norm2 = fvec_norm2_local(query, d);
     }
 
     void set_list(idx_t list_no_in, float /*coarse_dis*/) override {
@@ -172,16 +175,20 @@ struct IVFRaBitQLatticeScanner : InvertedListScanner {
         }
 
         if (metric_type == METRIC_INNER_PRODUCT) {
-            return query_dot_centroid +
+            const float residual_ip =
                     factors.dp_multiplier *
-                    dot_decoded_unit(query, code, d, book);
+                    dot_decoded_unit(
+                            query_minus_centroid.data(), code, d, book);
+            const float pre_dist = factors.adjusted_norm2 +
+                    query_minus_centroid_norm2 - 2.0f * residual_ip;
+            return -0.5f * (pre_dist - query_norm2);
         }
 
         const float residual_ip = factors.dp_multiplier *
                 dot_decoded_unit(query_minus_centroid.data(), code, d, book);
         return std::max(
                 0.0f,
-                query_minus_centroid_norm2 + factors.norm * factors.norm -
+                query_minus_centroid_norm2 + factors.adjusted_norm2 -
                         2.0f * residual_ip);
     }
 };
@@ -239,6 +246,10 @@ void IndexIVFRaBitQLattice::encode_vectors(
         LatticeFactors factors;
         factors.norm = stats.norm;
         factors.dp_multiplier = stats.norm == 0.0f ? 0.0f : stats.dp_multiplier;
+        factors.adjusted_norm2 = stats.norm * stats.norm;
+        if (metric_type == METRIC_INNER_PRODUCT) {
+            factors.adjusted_norm2 -= fvec_norm2_local(xi, d);
+        }
         store_factors(code, d, factors);
     }
 }

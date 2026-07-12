@@ -167,17 +167,21 @@ def row_membership(labels: np.ndarray, probes: np.ndarray) -> np.ndarray:
 def residual_estimated_scores(
     q: np.ndarray,
     centroids_for_x: np.ndarray,
+    x_norm2: np.ndarray,
     residual_norm2: np.ndarray,
     u: np.ndarray,
     dp: np.ndarray,
     metric: str,
 ) -> np.ndarray:
-    if metric == "ip":
-        return q @ centroids_for_x.T + (q @ u.T) * dp[None, :]
-
     q_minus_c = q[:, None, :] - centroids_for_x[None, :, :]
     cross = np.einsum("nmd,md->nm", q_minus_c, u, optimize=True) * dp[None, :]
     qmc_norm2 = np.einsum("nmd,nmd->nm", q_minus_c, q_minus_c, optimize=True)
+    if metric == "ip":
+        q_norm2 = np.sum(q * q, axis=1).astype(np.float32)
+        adjusted_norm2 = residual_norm2 - x_norm2
+        pre_dist = qmc_norm2 + adjusted_norm2[None, :] - 2.0 * cross
+        return -0.5 * (pre_dist - q_norm2[:, None])
+
     return -(qmc_norm2 + residual_norm2[None, :] - 2.0 * cross)
 
 
@@ -252,6 +256,7 @@ def run(args: argparse.Namespace) -> list[dict[str, object]]:
         n_scanned += int(mask.sum())
 
         exact = residual_exact_scores(q, x, args.metric)
+        x_norm2 = np.sum(x * x, axis=1).astype(np.float32)
         vals, ids = topk_block(exact, base0, args.k)
         exact_vals, exact_ids = merge_topk(exact_vals, exact_ids, vals, ids, args.k)
         pred_vals["ivf_exact"], pred_ids["ivf_exact"] = masked_merge_topk(
@@ -275,7 +280,7 @@ def run(args: argparse.Namespace) -> list[dict[str, object]]:
 
         for name, (u, rho, dp) in enc.items():
             scores = residual_estimated_scores(
-                q, centroids_for_x, residual_norm2, u, dp, args.metric
+                q, centroids_for_x, x_norm2, residual_norm2, u, dp, args.metric
             )
             pred_vals[name], pred_ids[name] = masked_merge_topk(
                 pred_vals[name], pred_ids[name], scores, mask, base0, args.k

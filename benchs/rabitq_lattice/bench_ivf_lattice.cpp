@@ -238,6 +238,19 @@ int main(int argc, char** argv) {
         base.train(train_n, ds.xb.data());
         base.add(ds.nb, ds.xb.data());
 
+        auto q_base_q4 = make_quantizer(ds.d, centroids);
+        faiss::IndexIVFRaBitQ base_q4(
+                q_base_q4.release(),
+                ds.d,
+                args.nlist,
+                faiss::METRIC_INNER_PRODUCT,
+                true,
+                1);
+        base_q4.qb = 4;
+        base_q4.nprobe = args.nprobe;
+        base_q4.train(train_n, ds.xb.data());
+        base_q4.add(ds.nb, ds.xb.data());
+
         auto q_lat = make_quantizer(ds.d, centroids);
         faiss::IndexIVFRaBitQLattice lattice(
                 q_lat.release(),
@@ -252,6 +265,7 @@ int main(int argc, char** argv) {
 
         bench_one("ivf_exact_flat", exact, ds, args.k, args.rounds);
         bench_one("ivf_rabitq_sign", base, ds, args.k, args.rounds);
+        bench_one("ivf_rabitq_sign_qb4", base_q4, ds, args.k, args.rounds);
         bench_one(
                 "ivf_rabitq_lattice_sym256", lattice, ds, args.k, args.rounds);
         return 0;
