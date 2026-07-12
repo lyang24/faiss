@@ -7,6 +7,7 @@
 
 #include <faiss/Clustering.h>
 #include <faiss/IndexFlat.h>
+#include <faiss/IndexIVFFlat.h>
 #include <faiss/IndexIVFRaBitQ.h>
 #include <faiss/IndexIVFRaBitQLattice.h>
 
@@ -210,6 +211,18 @@ int main(int argc, char** argv) {
 
         auto centroids =
                 train_centroids(ds, args.nlist, args.ntrain, args.niter);
+        const int train_n = std::min<int64_t>(args.ntrain, ds.nb);
+
+        auto q_exact = make_quantizer(ds.d, centroids);
+        faiss::IndexIVFFlat exact(
+                q_exact.release(),
+                ds.d,
+                args.nlist,
+                faiss::METRIC_INNER_PRODUCT,
+                true);
+        exact.nprobe = args.nprobe;
+        exact.train(train_n, ds.xb.data());
+        exact.add(ds.nb, ds.xb.data());
 
         auto q_base = make_quantizer(ds.d, centroids);
         faiss::IndexIVFRaBitQ base(
@@ -221,7 +234,6 @@ int main(int argc, char** argv) {
                 1);
         base.qb = 0;
         base.nprobe = args.nprobe;
-        const int train_n = std::min<int64_t>(args.ntrain, ds.nb);
 
         base.train(train_n, ds.xb.data());
         base.add(ds.nb, ds.xb.data());
@@ -238,6 +250,7 @@ int main(int argc, char** argv) {
         lattice.train(train_n, ds.xb.data());
         lattice.add(ds.nb, ds.xb.data());
 
+        bench_one("ivf_exact_flat", exact, ds, args.k, args.rounds);
         bench_one("ivf_rabitq_sign", base, ds, args.k, args.rounds);
         bench_one(
                 "ivf_rabitq_lattice_sym256", lattice, ds, args.k, args.rounds);
