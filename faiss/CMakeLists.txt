@@ -161,6 +161,7 @@ set(FAISS_SRC
   impl/pq_code_distance/IVFPQ_QueryTables.cpp
   impl/AdditiveQuantizer.cpp
   impl/RaBitQuantizer.cpp
+  impl/RaBitQLatticeCodebook.cpp
   impl/RaBitQuantizerMultiBit.cpp
   impl/RaBitQUtils.cpp
   impl/ResidualQuantizer.cpp
@@ -305,6 +306,7 @@ set(FAISS_HEADERS
   impl/ProductQuantizer.h
   impl/Quantizer.h
   impl/RaBitQuantizer.h
+  impl/RaBitQLatticeCodebook.h
   impl/RaBitQuantizerMultiBit.h
   impl/RaBitQUtils.h
   impl/ResidualQuantizer.h

@@ -21,6 +21,7 @@ set(FAISS_TEST_SRC
   test_cppcontrib_uintreader.cpp
   test_simdlib.cpp
   test_approx_topk.cpp
+  test_rabitq_lattice_codebook.cpp
   test_RCQ_cropping.cpp
   test_heap.cpp
   test_pq_code_distance.cpp
