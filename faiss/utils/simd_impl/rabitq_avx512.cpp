@@ -695,28 +695,69 @@ inline float ip_bitplane_avx512(
     v_weights[ex_bits] = _mm512_set1_ps(static_cast<float>(1u << ex_bits));
 
     size_t i = 0;
-    for (; i + 16 <= d; i += 16) {
-        uint16_t sb = 0;
-        memcpy(&sb, sign_bits + (i / 8), sizeof(uint16_t));
-        __m512 recon = _mm512_maskz_mov_ps(
-                static_cast<__mmask16>(sb), v_weights[ex_bits]);
-
-        uint64_t lo64 = 0;
-        uint64_t hi64 = 0;
-        memcpy(&lo64, ex_code + (i / 8) * ex_bits, sizeof(uint64_t));
-        memcpy(&hi64, ex_code + ((i / 8) + 1) * ex_bits, sizeof(uint64_t));
-
+    if (ex_bits <= 4) {
+        // 16 * ex_bits <= 64, so an entire 16-dim plane lives in one qword and
+        // a single _pext_u64 produces the __mmask16 directly. That halves both
+        // the extract count and the loads relative to the general path below,
+        // and covers nb_bits 3-5, the widths in practical use.
+        uint64_t wide_masks[4];
         for (size_t b = 0; b < ex_bits; b++) {
-            const uint32_t plane =
-                    static_cast<uint32_t>(_pext_u64(lo64, pext_masks[b])) |
-                    (static_cast<uint32_t>(_pext_u64(hi64, pext_masks[b]))
-                     << 8);
-            recon = _mm512_mask_add_ps(
-                    recon, static_cast<__mmask16>(plane), recon, v_weights[b]);
+            uint64_t m = 0;
+            for (int j = 0; j < 16; j++) {
+                m |= (1ULL << (b + j * ex_bits));
+            }
+            wide_masks[b] = m;
         }
 
-        __m512 rq = _mm512_loadu_ps(rotated_q + i);
-        acc = _mm512_fmadd_ps(rq, _mm512_add_ps(recon, v_cb), acc);
+        for (; i + 16 <= d; i += 16) {
+            uint16_t sb = 0;
+            memcpy(&sb, sign_bits + (i / 8), sizeof(uint16_t));
+            __m512 recon = _mm512_maskz_mov_ps(
+                    static_cast<__mmask16>(sb), v_weights[ex_bits]);
+
+            uint64_t ex64 = 0;
+            memcpy(&ex64, ex_code + (i / 8) * ex_bits, sizeof(uint64_t));
+
+            for (size_t b = 0; b < ex_bits; b++) {
+                const uint32_t plane =
+                        static_cast<uint32_t>(_pext_u64(ex64, wide_masks[b]));
+                recon = _mm512_mask_add_ps(
+                        recon,
+                        static_cast<__mmask16>(plane),
+                        recon,
+                        v_weights[b]);
+            }
+
+            __m512 rq = _mm512_loadu_ps(rotated_q + i);
+            acc = _mm512_fmadd_ps(rq, _mm512_add_ps(recon, v_cb), acc);
+        }
+    } else {
+        for (; i + 16 <= d; i += 16) {
+            uint16_t sb = 0;
+            memcpy(&sb, sign_bits + (i / 8), sizeof(uint16_t));
+            __m512 recon = _mm512_maskz_mov_ps(
+                    static_cast<__mmask16>(sb), v_weights[ex_bits]);
+
+            uint64_t lo64 = 0;
+            uint64_t hi64 = 0;
+            memcpy(&lo64, ex_code + (i / 8) * ex_bits, sizeof(uint64_t));
+            memcpy(&hi64, ex_code + ((i / 8) + 1) * ex_bits, sizeof(uint64_t));
+
+            for (size_t b = 0; b < ex_bits; b++) {
+                const uint32_t plane =
+                        static_cast<uint32_t>(_pext_u64(lo64, pext_masks[b])) |
+                        (static_cast<uint32_t>(_pext_u64(hi64, pext_masks[b]))
+                         << 8);
+                recon = _mm512_mask_add_ps(
+                        recon,
+                        static_cast<__mmask16>(plane),
+                        recon,
+                        v_weights[b]);
+            }
+
+            __m512 rq = _mm512_loadu_ps(rotated_q + i);
+            acc = _mm512_fmadd_ps(rq, _mm512_add_ps(recon, v_cb), acc);
+        }
     }
 
     // Half-width step so the scalar tail stays under 8 dims, as it was with the
@@ -738,7 +779,9 @@ inline float ip_bitplane_avx512(
                     recon, static_cast<__mmask16>(plane), recon, v_weights[b]);
         }
 
-        __m512 rq = _mm512_maskz_loadu_ps(0x00ff, rotated_q + i);
+        // zero-extending 256-bit load: upper 8 lanes are guaranteed zero, so
+        // it is equivalent to a masked load without involving a mask register
+        __m512 rq = _mm512_zextps256_ps512(_mm256_loadu_ps(rotated_q + i));
         acc = _mm512_fmadd_ps(rq, _mm512_add_ps(recon, v_cb), acc);
         i += 8;
     }
