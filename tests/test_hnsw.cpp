@@ -268,6 +268,99 @@ TEST(HNSW, Test_IndexHNSW_METRIC_Lp) {
     EXPECT_EQ(label, 0);              // Label should be 0
 }
 
+namespace {
+
+struct ConstantSymmetricDistanceComputer : faiss::DistanceComputer {
+    void set_query(const float*) override {}
+
+    float operator()(faiss::idx_t) override {
+        return 0.0f;
+    }
+
+    float symmetric_dis(faiss::idx_t, faiss::idx_t) override {
+        return 1.0f;
+    }
+};
+
+} // namespace
+
+TEST(HNSW, Test_RaBitQ_DiversityPrunePolicy) {
+    ConstantSymmetricDistanceComputer dis;
+    using Candidate = faiss::HNSW::NodeDistFartherT<faiss::HNSW::C_distance>;
+
+    auto make_candidates = []() {
+        std::priority_queue<Candidate> candidates;
+        candidates.emplace(1.0f, 0);
+        candidates.emplace(1.05f, 1);
+        return candidates;
+    };
+
+    std::vector<Candidate> baseline;
+    auto baseline_candidates = make_candidates();
+    faiss::HNSW::shrink_neighbor_list(
+            dis, baseline_candidates, baseline, 2, false);
+    ASSERT_EQ(baseline.size(), 1);
+
+    std::vector<Candidate> robust;
+    auto robust_candidates = make_candidates();
+    faiss::HNSW::shrink_neighbor_list_scaled(
+            dis, robust_candidates, robust, 2, false, 1.1025f);
+    ASSERT_EQ(robust.size(), 2);
+
+    auto policy = [](faiss::IndexHNSW& index) {
+        std::unique_ptr<faiss::DistanceComputer> dc(
+                index.storage->get_distance_computer());
+        return index.hnsw.diversity_prune_scale(*dc);
+    };
+
+    faiss::IndexHNSWRaBitQ rabitq32(8, 32, 4);
+    EXPECT_NEAR(policy(rabitq32), 1.1025f, 1e-6f);
+
+    faiss::IndexHNSWRaBitQ rabitq16(8, 16, 4);
+    EXPECT_NEAR(policy(rabitq16), 1.1025f, 1e-6f);
+
+    faiss::IndexHNSWRaBitQ rabitq1(8, 32, 1);
+    EXPECT_FLOAT_EQ(policy(rabitq1), 1.0f);
+
+    faiss::IndexHNSWRaBitQ rabitq3(8, 32, 3);
+    EXPECT_FLOAT_EQ(policy(rabitq3), 1.0f);
+
+    faiss::IndexHNSWRaBitQ rabitq8(8, 8, 4);
+    EXPECT_FLOAT_EQ(policy(rabitq8), 1.0f);
+
+    faiss::IndexHNSWRaBitQ rabitq33(8, 33, 4);
+    EXPECT_FLOAT_EQ(policy(rabitq33), 1.0f);
+
+    faiss::IndexHNSWFlat ordinary(8, 32, faiss::METRIC_L2);
+    EXPECT_FLOAT_EQ(policy(ordinary), 1.0f);
+
+    using SimilarityCandidate =
+            faiss::HNSW::NodeDistFartherT<faiss::HNSW::C_similarity>;
+    auto make_similarity_candidates = []() {
+        std::priority_queue<SimilarityCandidate> candidates;
+        candidates.emplace(1.0f, 0);
+        candidates.emplace(0.95f, 1);
+        return candidates;
+    };
+    auto similarity_baseline_candidates = make_similarity_candidates();
+    auto similarity_scaled_candidates = make_similarity_candidates();
+    std::vector<SimilarityCandidate> similarity_baseline;
+    std::vector<SimilarityCandidate> similarity_scaled;
+    faiss::HNSW::shrink_neighbor_list(
+            dis, similarity_baseline_candidates, similarity_baseline, 2, false);
+    faiss::HNSW::shrink_neighbor_list_scaled<faiss::HNSW::C_similarity>(
+            dis,
+            similarity_scaled_candidates,
+            similarity_scaled,
+            2,
+            false,
+            100.0f);
+    ASSERT_EQ(similarity_scaled.size(), similarity_baseline.size());
+    for (size_t i = 0; i < similarity_baseline.size(); i++) {
+        EXPECT_EQ(similarity_scaled[i].id, similarity_baseline[i].id);
+    }
+}
+
 TEST(HNSW, Test_IndexHNSWCagra_BaseLevelOnly_RangeSearch) {
     int d = 8;
     int nb = 100;

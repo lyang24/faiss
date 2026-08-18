@@ -154,8 +154,14 @@ struct HNSW {
     /// use bounded queue during exploration
     bool search_bounded_queue = true;
 
-    /// use Panorama progressive pruning in search
-    bool is_panorama = false;
+    /// Specialized level-0 search implementations. This state is derived from
+    /// the owning IndexHNSW subtype after construction or deserialization.
+    enum Search_method_t : uint8_t {
+        SM_DEFAULT,
+        SM_PANORAMA,
+        SM_RABITQ,
+    };
+    Search_method_t search_method = SM_DEFAULT;
 
     /// distance comparison semantics: when true, distances are treated as
     /// similarity scores (larger is better). Default false matches the
@@ -179,6 +185,13 @@ struct HNSW {
 
     /// nb of neighbors for this level
     int nb_neighbors(int layer_no) const;
+
+#ifndef SWIG
+    /// Internal build policy derived from the active distance computer.
+    /// Returns a multiplier for squared pairwise distances in diversity
+    /// pruning. The default policy returns 1 for ordinary HNSW builds.
+    float diversity_prune_scale(const DistanceComputer& qdis) const;
+#endif
 
     /// cumulative nb up to (and excluding) this level
     int cum_nb_neighbors(int layer_no) const;
@@ -278,6 +291,17 @@ struct HNSW {
             std::vector<NodeDistFartherT<C>>& output,
             size_t max_size,
             bool keep_max_size_level0 = false);
+
+#ifndef SWIG
+    template <class C = C_distance>
+    static void shrink_neighbor_list_scaled(
+            DistanceComputer& qdis,
+            std::priority_queue<NodeDistFartherT<C>>& input,
+            std::vector<NodeDistFartherT<C>>& output,
+            size_t max_size,
+            bool keep_max_size_level0,
+            float pairwise_distance_scale);
+#endif
 
     void permute_entries(const idx_t* map);
 };
