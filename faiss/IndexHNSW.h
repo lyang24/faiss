@@ -216,6 +216,55 @@ struct IndexHNSWSQ : IndexHNSW {
             MetricType metric = METRIC_L2);
 };
 
+/** HNSW index whose storage is RaBitQ-compressed.
+ *
+ * RaBitQ does not implement symmetric_dis(), which HNSW's neighbor-diversity
+ * pruning needs, so the graph cannot be built from the codes. Instead the exact
+ * vectors are kept in `build_storage` for the duration of the build, the graph
+ * is built from them, and finalize() drops them. Search then runs entirely on
+ * the compressed codes. Until finalize() is called, serialization and cloning
+ * preserve this exact storage so that the resulting index remains mutable.
+ *
+ * With nb_bits >= 2 the codes carry a per-vector error factor, so search uses
+ * the staged search method: a 1-bit estimate for every neighbor and the full
+ * multi-bit distance only for candidates the error bound cannot rule out.
+ * nb_bits = 1 has no error factor and uses ordinary HNSW search.
+ */
+struct IndexHNSWRaBitQ : IndexHNSW {
+    /// Exact vectors, needed only to build the graph; null once finalized.
+    /// This pointer is owned by the index and must not be replaced by callers.
+    IndexFlat* build_storage = nullptr;
+
+    IndexHNSWRaBitQ();
+    IndexHNSWRaBitQ(
+            int d,
+            int M,
+            uint8_t nb_bits = 1,
+            MetricType metric = METRIC_L2);
+
+    IndexHNSWRaBitQ& operator=(const IndexHNSWRaBitQ&) = delete;
+
+    ~IndexHNSWRaBitQ() override;
+
+    void train(idx_t n, const float* x) override;
+    void add(idx_t n, const float* x) override;
+    void reset() override;
+    void permute_entries(const idx_t* perm) override;
+
+    /// Release the exact vectors. The index remains searchable but cannot be
+    /// extended until reset() starts a new empty build.
+    void finalize();
+
+   private:
+    /// clone_index() replaces the shallow-copied compressed storage before the
+    /// clone escapes. Keep this constructor private so ordinary C++ copies
+    /// cannot create two indexes sharing mutable compressed storage.
+    IndexHNSWRaBitQ(const IndexHNSWRaBitQ& other);
+#ifndef SWIG
+    friend IndexHNSW* clone_IndexHNSW(const IndexHNSW* index);
+#endif
+};
+
 /** 2-level code structure with fast random access
  */
 struct IndexHNSW2Level : IndexHNSW {

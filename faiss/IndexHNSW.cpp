@@ -7,6 +7,8 @@
 
 #include <faiss/IndexHNSW.h>
 
+#include <faiss/IndexRaBitQ.h>
+
 #include <omp.h>
 #include <atomic>
 #include <cinttypes>
@@ -577,6 +579,7 @@ void hnsw_search(
         }
     }
     size_t n1 = 0, n2 = 0, ndis = 0, nhops = 0;
+    size_t n_rabitq_1bit = 0, n_rabitq_refine = 0;
 
     idx_t check_period = InterruptCallback::get_period_hint(
             hnsw.max_level * index->d * efSearch);
@@ -602,7 +605,9 @@ void hnsw_search(
                 omp_capture_exception(ex, [&] { interrupt = true; });
             }
 
-#pragma omp for reduction(+ : n1, n2, ndis, nhops) schedule(guided)
+#pragma omp for reduction(                                               \
+                + : n1, n2, ndis, nhops, n_rabitq_1bit, n_rabitq_refine) \
+        schedule(guided)
             for (idx_t i = i0; i < i1; i++) {
                 if (interrupt.load(std::memory_order_relaxed)) {
                     continue;
@@ -610,6 +615,10 @@ void hnsw_search(
                 try {
                     res->begin(i);
                     dis->set_query(x + i * index->d);
+                    auto* rq = dynamic_cast<RaBitQDistanceComputer*>(dis.get());
+                    if (rq) {
+                        rq->stats.reset();
+                    }
 
                     HNSWStats stats =
                             hnsw.search(*dis, index, *res, *vt, params);
@@ -617,6 +626,10 @@ void hnsw_search(
                     n2 += stats.n2;
                     ndis += stats.ndis;
                     nhops += stats.nhops;
+                    if (rq) {
+                        n_rabitq_1bit += rq->stats.n_1bit;
+                        n_rabitq_refine += rq->stats.n_refine;
+                    }
                     res->end();
                     vt->advance();
                 } catch (...) {
@@ -629,6 +642,7 @@ void hnsw_search(
     }
 
     hnsw_stats.combine({n1, n2, ndis, nhops});
+    rabitq_stats.add({n_rabitq_1bit, n_rabitq_refine});
 }
 
 } // anonymous namespace
@@ -799,6 +813,7 @@ void IndexHNSW::search_level_0(
         {
             std::unique_ptr<DistanceComputer> qdis;
             HNSWStats search_stats;
+            RaBitQStats rq_search_stats;
             VisitedTable* vt = nullptr;
             std::unique_ptr<typename RH::SingleResultHandler> res;
             try {
@@ -818,6 +833,11 @@ void IndexHNSW::search_level_0(
                 try {
                     res->begin(i);
                     qdis->set_query(x + i * d);
+                    auto* rq =
+                            dynamic_cast<RaBitQDistanceComputer*>(qdis.get());
+                    if (rq) {
+                        rq->stats.reset();
+                    }
 
                     hnsw.search_level_0(
                             *qdis.get(),
@@ -829,6 +849,9 @@ void IndexHNSW::search_level_0(
                             search_stats,
                             *vt,
                             params);
+                    if (rq) {
+                        rq_search_stats.add(rq->stats);
+                    }
                     res->end();
                     vt->advance();
                 } catch (...) {
@@ -838,6 +861,7 @@ void IndexHNSW::search_level_0(
 #pragma omp critical
             {
                 hnsw_stats.combine(search_stats);
+                rabitq_stats.add(rq_search_stats);
             }
         }
         omp_rethrow_if_exception(ex);
@@ -1061,7 +1085,7 @@ IndexHNSWFlatPanorama::IndexHNSWFlatPanorama(
     // Enable Panorama search mode.
     // This is not ideal, but is still more simple than making a subclass of
     // HNSW and overriding the search logic.
-    hnsw.is_panorama = true;
+    hnsw.search_method = HNSW::SM_PANORAMA;
 }
 
 void IndexHNSWFlatPanorama::add(idx_t n, const float* x) {
@@ -1127,6 +1151,128 @@ IndexHNSWSQ::IndexHNSWSQ(
 }
 
 IndexHNSWSQ::IndexHNSWSQ() = default;
+
+/**************************************************************
+ * IndexHNSWRaBitQ implementation
+ **************************************************************/
+
+IndexHNSWRaBitQ::IndexHNSWRaBitQ() = default;
+
+IndexHNSWRaBitQ::IndexHNSWRaBitQ(
+        int d,
+        int M,
+        uint8_t nb_bits,
+        MetricType metric)
+        : IndexHNSW(d, M, metric) {
+    FAISS_THROW_IF_NOT_MSG(
+            metric == METRIC_L2 || metric == METRIC_INNER_PRODUCT,
+            "IndexHNSWRaBitQ supports only L2 and inner product metrics");
+    auto compressed = std::make_unique<IndexRaBitQ>(d, metric, nb_bits);
+    std::unique_ptr<IndexFlat> exact = (metric == METRIC_L2)
+            ? std::unique_ptr<IndexFlat>(new IndexFlatL2(d))
+            : std::make_unique<IndexFlat>(d, metric);
+    storage = compressed.release();
+    build_storage = exact.release();
+    own_fields = true;
+    is_trained = storage->is_trained;
+    // 1-bit codes store plain SignBitFactors with no f_error, so there is no
+    // bound to prune with and the staged path does not apply.
+    hnsw.search_method = nb_bits >= 2 ? HNSW::SM_RABITQ : HNSW::SM_DEFAULT;
+}
+
+IndexHNSWRaBitQ::IndexHNSWRaBitQ(const IndexHNSWRaBitQ& other)
+        : IndexHNSW(other), build_storage(nullptr) {
+    // IndexHNSW's implicit copy shares compressed storage. clone_index()
+    // replaces it with a deep copy and restores ownership.
+    own_fields = false;
+    if (other.build_storage) {
+        build_storage = new IndexFlat(*other.build_storage);
+    }
+}
+
+IndexHNSWRaBitQ::~IndexHNSWRaBitQ() {
+    delete build_storage;
+}
+
+void IndexHNSWRaBitQ::train(idx_t n, const float* x) {
+    FAISS_THROW_IF_NOT_MSG(storage, "storage not initialized");
+    FAISS_THROW_IF_NOT_MSG(
+            build_storage, "index is finalized and cannot be trained again");
+    build_storage->train(n, x);
+    storage->train(n, x);
+    is_trained = true;
+}
+
+void IndexHNSWRaBitQ::add(idx_t n, const float* x) {
+    FAISS_THROW_IF_NOT_MSG(
+            build_storage,
+            "index is finalized; rebuild it from scratch to add more vectors");
+    FAISS_THROW_IF_NOT(is_trained);
+    size_t n0 = ntotal;
+    storage->add(n, x);
+    build_storage->add(n, x);
+    ntotal = storage->ntotal;
+
+    const bool preset_levels =
+            hnsw.levels.size() == static_cast<size_t>(ntotal);
+
+    // The graph must be built from exact distances because RaBitQ has no
+    // symmetric_dis(). The deterministic builder accepts a distance-computer
+    // callback directly, so it can read build_storage without changing the
+    // index's searchable storage.
+    if (hnsw_deterministic_build) {
+        hnsw_add_vertices_deterministic(
+                hnsw,
+                n0,
+                n,
+                d,
+                init_level0,
+                keep_max_size_level0,
+                preset_levels,
+                verbose,
+                [this] { return storage_distance_computer(build_storage); },
+                [this, x, n0](DistanceComputer& dc, HNSW::storage_idx_t pt_id) {
+                    dc.set_query(x + (pt_id - n0) * d);
+                });
+        return;
+    }
+
+    // The legacy builder obtains its distance computer from index.storage, so
+    // point that field at the exact vectors only for the duration of the build.
+    Index* compressed = storage;
+    storage = build_storage;
+    try {
+        hnsw_add_vertices(*this, n0, n, x, verbose, preset_levels);
+    } catch (...) {
+        // Never leave search pointing at the temporary FP32 build storage.
+        storage = compressed;
+        throw;
+    }
+    storage = compressed;
+}
+
+void IndexHNSWRaBitQ::reset() {
+    IndexHNSW::reset();
+    if (build_storage) {
+        build_storage->reset();
+    } else {
+        build_storage = (metric_type == METRIC_L2)
+                ? static_cast<IndexFlat*>(new IndexFlatL2(d))
+                : new IndexFlat(d, metric_type);
+    }
+}
+
+void IndexHNSWRaBitQ::permute_entries(const idx_t* perm) {
+    if (build_storage) {
+        build_storage->permute_entries(perm);
+    }
+    IndexHNSW::permute_entries(perm);
+}
+
+void IndexHNSWRaBitQ::finalize() {
+    delete build_storage;
+    build_storage = nullptr;
+}
 
 /**************************************************************
  * IndexHNSW2Level implementation

@@ -873,12 +873,26 @@ void write_index(const Index* idx, IOWriter* f, int io_flags) {
                 : dynamic_cast<const IndexHNSWSQ*>(idx)     ? fourcc("IHNs")
                 : dynamic_cast<const IndexHNSW2Level*>(idx) ? fourcc("IHN2")
                 : dynamic_cast<const IndexHNSWCagra*>(idx)  ? fourcc("IHc2")
+                : dynamic_cast<const IndexHNSWRaBitQ*>(idx) ? fourcc("IHNr")
                 : typeid(*idx) == typeid(IndexHNSW)         ? fourcc("IH00")
                                                             : 0;
         FAISS_THROW_IF_NOT_FMT(
                 h != 0,
                 "don't know how to serialize this IndexHNSW subtype: %s",
                 typeid(*idx).name());
+        const IndexHNSWRaBitQ* idx_rabitq = nullptr;
+        const IndexRaBitQ* storage_rabitq = nullptr;
+        if (h == fourcc("IHNr")) {
+            idx_rabitq = dynamic_cast<const IndexHNSWRaBitQ*>(idxhnsw);
+            storage_rabitq = dynamic_cast<const IndexRaBitQ*>(idxhnsw->storage);
+            FAISS_THROW_IF_NOT_MSG(
+                    idx_rabitq, "IHNr serialization requires IndexHNSWRaBitQ");
+            FAISS_THROW_IF_NOT_MSG(
+                    storage_rabitq ||
+                            ((io_flags & IO_FLAG_SKIP_STORAGE) &&
+                             idxhnsw->storage == nullptr),
+                    "IndexHNSWRaBitQ requires IndexRaBitQ storage");
+        }
         WRITE1(h);
         write_index_header(idxhnsw, f);
         if (h == fourcc("IHfP")) {
@@ -900,6 +914,17 @@ void write_index(const Index* idx, IOWriter* f, int io_flags) {
             WRITE1(n4);
         } else {
             write_index(idxhnsw->storage, f);
+        }
+        if (h == fourcc("IHNr")) {
+            const bool centered =
+                    storage_rabitq ? storage_rabitq->centered : false;
+            WRITE1(centered);
+            const bool has_build_storage = !(io_flags & IO_FLAG_SKIP_STORAGE) &&
+                    idx_rabitq->build_storage != nullptr;
+            WRITE1(has_build_storage);
+            if (has_build_storage) {
+                write_index(idx_rabitq->build_storage, f);
+            }
         }
     } else if (const IndexNSG* idxnsg = dynamic_cast<const IndexNSG*>(idx)) {
         uint32_t h = dynamic_cast<const IndexNSGFlat*>(idx) ? fourcc("INSf")

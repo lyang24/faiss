@@ -24,6 +24,8 @@
 
 namespace faiss {
 
+RaBitQStats rabitq_stats;
+
 // Import shared utilities from RaBitQUtils
 using rabitq_utils::ExtraBitsFactors;
 using rabitq_utils::QueryFactorsData;

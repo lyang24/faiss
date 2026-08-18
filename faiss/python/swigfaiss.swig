@@ -614,6 +614,7 @@ void gpu_sync_all_devices()
 %include  <faiss/impl/HNSW.h>
 %ignore faiss::IndexHNSW::locks;
 %ignore faiss::IndexBinaryHNSW::locks;
+%immutable faiss::IndexHNSWRaBitQ::build_storage;
 %include  <faiss/IndexHNSW.h>
 
 %include <faiss/impl/kmeans1d.h>
@@ -914,6 +915,7 @@ typedef int cudaDataType_t;
     DOWNCAST ( IndexHNSWPQ )
     DOWNCAST ( IndexHNSWSQ )
     DOWNCAST ( IndexHNSWCagra )
+    DOWNCAST ( IndexHNSWRaBitQ )
     DOWNCAST ( IndexHNSW )
     DOWNCAST ( IndexHNSW2Level )
     DOWNCAST ( IndexNNDescentFlat )

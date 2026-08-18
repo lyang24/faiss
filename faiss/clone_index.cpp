@@ -9,6 +9,8 @@
 
 #include <faiss/clone_index.h>
 
+#include <memory>
+
 #include <faiss/impl/FaissAssert.h>
 
 #include <faiss/Index2Layer.h>
@@ -38,6 +40,7 @@
 #include <faiss/IndexPQ.h>
 #include <faiss/IndexPQFastScan.h>
 #include <faiss/IndexPreTransform.h>
+#include <faiss/IndexRaBitQ.h>
 #include <faiss/IndexRefine.h>
 #include <faiss/IndexRowwiseMinMax.h>
 #include <faiss/IndexScalarQuantizer.h>
@@ -139,6 +142,7 @@ IndexIDMap* clone_IndexIDMap(const IndexIDMap* im) {
 IndexHNSW* clone_IndexHNSW(const IndexHNSW* ihnsw) {
     TRYCLONE(IndexHNSW2Level, ihnsw)
     TRYCLONE(IndexHNSWFlatPanorama, ihnsw)
+    TRYCLONE(IndexHNSWRaBitQ, ihnsw)
     TRYCLONE(IndexHNSWFlat, ihnsw)
     TRYCLONE(IndexHNSWPQ, ihnsw)
     TRYCLONE(IndexHNSWSQ, ihnsw)
@@ -294,6 +298,7 @@ Index* Cloner::clone_Index(const Index* index) {
     TRYCLONE(IndexEDEN, index)
 
     TRYCLONE(IndexScalarQuantizer, index)
+    TRYCLONE(IndexRaBitQ, index)
     TRYCLONE(MultiIndexQuantizer, index)
 
     if (const IndexIVF* ivf = dynamic_cast<const IndexIVF*>(index)) {
@@ -336,11 +341,16 @@ Index* Cloner::clone_Index(const Index* index) {
         res->index = clone_Index(idmap->index);
         return res;
     } else if (const IndexHNSW* ihnsw = dynamic_cast<const IndexHNSW*>(index)) {
-        IndexHNSW* res = clone_IndexHNSW(ihnsw);
-        res->own_fields = true;
+        std::unique_ptr<IndexHNSW> res(clone_IndexHNSW(ihnsw));
+        // Copy constructors temporarily share storage. Disable ownership until
+        // the deep copy succeeds so an allocation failure cannot delete the
+        // source index's storage.
+        res->own_fields = false;
         // make sure we don't get a GPU index here
-        res->storage = Cloner::clone_Index(ihnsw->storage);
-        return res;
+        std::unique_ptr<Index> storage(Cloner::clone_Index(ihnsw->storage));
+        res->storage = storage.release();
+        res->own_fields = true;
+        return res.release();
     } else if (const IndexNSG* insg = dynamic_cast<const IndexNSG*>(index)) {
         IndexNSG* res = clone_IndexNSG(insg);
 
