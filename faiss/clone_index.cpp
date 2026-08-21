@@ -38,6 +38,7 @@
 #include <faiss/IndexPQ.h>
 #include <faiss/IndexPQFastScan.h>
 #include <faiss/IndexPreTransform.h>
+#include <faiss/IndexQuiver.h>
 #include <faiss/IndexRefine.h>
 #include <faiss/IndexRowwiseMinMax.h>
 #include <faiss/IndexScalarQuantizer.h>
@@ -292,6 +293,7 @@ Index* Cloner::clone_Index(const Index* index) {
     TRYCLONE(IndexRandom, index)
     TRYCLONE(IndexPQFastScan, index)
     TRYCLONE(IndexEDEN, index)
+    TRYCLONE(IndexQuiver, index)
 
     TRYCLONE(IndexScalarQuantizer, index)
     TRYCLONE(MultiIndexQuantizer, index)

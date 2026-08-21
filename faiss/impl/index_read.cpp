@@ -53,6 +53,7 @@
 #include <faiss/IndexPQ.h>
 #include <faiss/IndexPQFastScan.h>
 #include <faiss/IndexPreTransform.h>
+#include <faiss/IndexQuiver.h>
 #include <faiss/IndexRaBitQ.h>
 #include <faiss/IndexRaBitQFastScan.h>
 #include <faiss/IndexRefine.h>
@@ -2775,6 +2776,26 @@ std::unique_ptr<Index> read_index_up(IOReader* f, int io_flags) {
                 iveden->code_size);
         read_InvertedLists(*iveden, f, io_flags);
         idx = std::move(iveden);
+    } else if (h == fourcc("IxQv")) {
+        auto idxqv = std::make_unique<IndexQuiver>();
+        read_index_header(*idxqv, f);
+        FAISS_THROW_IF_NOT_MSG(
+                idxqv->metric_type == METRIC_INNER_PRODUCT,
+                "serialized IndexQuiver must use METRIC_INNER_PRODUCT");
+        idxqv->code_size = 2 * ((static_cast<size_t>(idxqv->d) + 7) / 8);
+        READVECTOR(idxqv->codes);
+        FAISS_THROW_IF_NOT_FMT(
+                idxqv->codes.size() ==
+                        mul_no_overflow(
+                                static_cast<size_t>(idxqv->ntotal),
+                                idxqv->code_size,
+                                "IndexQuiver codes"),
+                "IndexQuiver codes size %zu does not match ntotal=%" PRId64
+                " and code_size=%zu",
+                idxqv->codes.size(),
+                idxqv->ntotal,
+                idxqv->code_size);
+        idx = std::move(idxqv);
     } else if (h == fourcc("Irfn") || h == fourcc("Irfs")) {
         // Irfn = new format (aux data embedded in SIMD blocks)
         // Irfs = legacy format (flat_storage separate, needs migration)

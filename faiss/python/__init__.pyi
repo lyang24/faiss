@@ -3780,6 +3780,18 @@ class IndexQINCo(IndexNeuralNetCodec):
         metric: MetricType = METRIC_L2,
     ) -> None: ...
 
+# QuIVer index
+class IndexQuiver(IndexFlatCodes):
+    @overload
+    def __init__(
+        self,
+        d: int,
+        metric: MetricType = METRIC_INNER_PRODUCT,
+    ) -> None: ...
+    @overload
+    def __init__(self) -> None: ...
+    def plane_size(self) -> int: ...
+
 # RaBitQ indices
 class RaBitQSearchParameters(SearchParameters):
     qb: int  # number of bits to quantize a query with (0 = raw fp32)

@@ -48,6 +48,7 @@
 #include <faiss/IndexPQ.h>
 #include <faiss/IndexPQFastScan.h>
 #include <faiss/IndexPreTransform.h>
+#include <faiss/IndexQuiver.h>
 #include <faiss/IndexRaBitQ.h>
 #include <faiss/IndexRaBitQFastScan.h>
 #include <faiss/IndexRefine.h>
@@ -1001,6 +1002,12 @@ void write_index(const Index* idx, IOWriter* f, int io_flags) {
         WRITE1(iveden->code_size);
         WRITE1(iveden->by_residual);
         write_InvertedLists(iveden->invlists, f);
+    } else if (
+            const IndexQuiver* idxqv = dynamic_cast<const IndexQuiver*>(idx)) {
+        uint32_t h = fourcc("IxQv");
+        WRITE1(h);
+        write_index_header(idxqv, f);
+        WRITEVECTOR(idxqv->codes);
     } else if (
             const IndexRaBitQFastScan* idxqfs =
                     dynamic_cast<const IndexRaBitQFastScan*>(idx)) {

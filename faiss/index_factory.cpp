@@ -42,6 +42,7 @@
 #include <faiss/IndexPQ.h>
 #include <faiss/IndexPQFastScan.h>
 #include <faiss/IndexPreTransform.h>
+#include <faiss/IndexQuiver.h>
 #include <faiss/IndexRaBitQ.h>
 #include <faiss/IndexRaBitQFastScan.h>
 #include <faiss/IndexRefine.h>
@@ -564,6 +565,12 @@ IndexHNSW* parse_IndexHNSW(
         return new IndexHNSWFlatPanorama(d, hnsw_M, nlevels, mt);
     }
 
+    if (match("Quiver")) {
+        auto index = new IndexHNSW(new IndexQuiver(d, mt), hnsw_M);
+        index->own_fields = true;
+        return index;
+    }
+
     if (match("PQ([0-9]+)(x[0-9]+)?(np)?")) {
         int M = std::stoi(sm[1].str());
         int nbit = mres_to_int(sm[2], 8, 1);
@@ -929,6 +936,10 @@ Index* parse_other_indexes(
     if (match("RaBitQ([1-9])?")) {
         uint8_t nb_bits = sm[1].length() > 0 ? std::stoi(sm[1].str()) : 1;
         return new IndexRaBitQ(d, metric, nb_bits);
+    }
+
+    if (match("Quiver")) {
+        return new IndexQuiver(d, metric);
     }
 
     // IndexEDEN with optional nb_bits (1-8) and scale type.
