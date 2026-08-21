@@ -132,6 +132,7 @@ set(FAISS_SRC
   IndexPQFastScan.cpp
   IndexPreTransform.cpp
   IndexQuiver.cpp
+  IndexQuiverVamana.cpp
   IndexRaBitQ.cpp
   IndexRaBitQFastScan.cpp
   IndexRefine.cpp

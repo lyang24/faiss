@@ -114,5 +114,67 @@ class TestHNSWQuiver(unittest.TestCase):
         np.testing.assert_array_equal(expected[0], actual_restored[0])
 
 
+class TestQuiverVamana(unittest.TestCase):
+    def make_data(self, d=48, nb=600, nq=30):
+        rng = np.random.RandomState(456)
+        centers = rng.randn(12, d).astype("float32")
+        faiss.normalize_L2(centers)
+        xb = centers[rng.randint(0, len(centers), size=nb)]
+        xb = xb + 0.06 * rng.randn(nb, d).astype("float32")
+        faiss.normalize_L2(xb)
+        xq = xb[:nq] + 0.015 * rng.randn(nq, d).astype("float32")
+        faiss.normalize_L2(xq)
+        return xb, xq
+
+    def test_factory_degree_and_one_shot_build(self):
+        index = faiss.index_factory(
+            48, "Vamana4,Quiver", faiss.METRIC_INNER_PRODUCT
+        )
+        self.assertIsInstance(index, faiss.IndexQuiverVamana)
+        index.construction_ef = 32
+        index.search_ef = 32
+        xb, xq = self.make_data()
+        index.add(xb)
+
+        self.assertTrue(all(index.get_degree(i) <= 8 for i in range(index.ntotal)))
+        distances, labels = index.search(xq, 10)
+        self.assertTrue(np.isfinite(distances).all())
+        self.assertTrue((labels >= 0).all())
+        with self.assertRaises(RuntimeError):
+            index.add(xb[:1])
+
+    def test_full_candidate_rerank_and_io(self):
+        index = faiss.index_factory(
+            48, "Vamana4,Quiver,RFlat", faiss.METRIC_INNER_PRODUCT
+        )
+        base = faiss.downcast_index(index.base_index)
+        base.construction_ef = 32
+        base.search_ef = 40
+        index.k_factor = 4
+        xb, xq = self.make_data()
+        index.add(xb)
+
+        distances, labels = index.search(xq, 10)
+        expected_scores = np.take_along_axis(xq @ xb.T, labels, axis=1)
+        np.testing.assert_allclose(distances, expected_scores, atol=1e-6)
+
+        exact = faiss.IndexFlatIP(48)
+        exact.add(xb)
+        _, truth = exact.search(xq, 10)
+        recall = sum(
+            len(set(found) & set(expected))
+            for found, expected in zip(labels, truth)
+        ) / (len(xq) * 10)
+        self.assertGreater(recall, 0.7)
+
+        restored = faiss.deserialize_index(faiss.serialize_index(index))
+        restored.k_factor = index.k_factor
+        restored_base = faiss.downcast_index(restored.base_index)
+        restored_base.search_ef = base.search_ef
+        restored_result = restored.search(xq, 10)
+        np.testing.assert_array_equal(labels, restored_result[1])
+        np.testing.assert_array_equal(distances, restored_result[0])
+
+
 if __name__ == "__main__":
     unittest.main()

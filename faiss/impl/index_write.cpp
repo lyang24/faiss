@@ -49,6 +49,7 @@
 #include <faiss/IndexPQFastScan.h>
 #include <faiss/IndexPreTransform.h>
 #include <faiss/IndexQuiver.h>
+#include <faiss/IndexQuiverVamana.h>
 #include <faiss/IndexRaBitQ.h>
 #include <faiss/IndexRaBitQFastScan.h>
 #include <faiss/IndexRefine.h>
@@ -902,6 +903,19 @@ void write_index(const Index* idx, IOWriter* f, int io_flags) {
         } else {
             write_index(idxhnsw->storage, f);
         }
+    } else if (
+            const IndexQuiverVamana* idxqv =
+                    dynamic_cast<const IndexQuiverVamana*>(idx)) {
+        uint32_t h = fourcc("IQVm");
+        WRITE1(h);
+        write_index_header(idxqv, f);
+        WRITE1(idxqv->m);
+        WRITE1(idxqv->construction_ef);
+        WRITE1(idxqv->search_ef);
+        WRITE1(idxqv->alpha);
+        WRITE1(idxqv->random_seed);
+        write_NSG(&idxqv->nsg, f);
+        write_index(idxqv->storage, f);
     } else if (const IndexNSG* idxnsg = dynamic_cast<const IndexNSG*>(idx)) {
         uint32_t h = dynamic_cast<const IndexNSGFlat*>(idx) ? fourcc("INSf")
                 : dynamic_cast<const IndexNSGPQ*>(idx)      ? fourcc("INSp")

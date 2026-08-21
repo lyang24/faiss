@@ -213,6 +213,7 @@ typedef uint64_t size_t;
 #include <faiss/IndexRaBitQ.h>
 #include <faiss/IndexRaBitQFastScan.h>
 #include <faiss/IndexQuiver.h>
+#include <faiss/IndexQuiverVamana.h>
 #include <faiss/IndexIVFRaBitQ.h>
 #include <faiss/IndexIVFRaBitQFastScan.h>
 
@@ -734,6 +735,7 @@ void gpu_sync_all_devices()
 %include <faiss/IndexRaBitQ.h>
 %include <faiss/IndexRaBitQFastScan.h>
 %include <faiss/IndexQuiver.h>
+%include <faiss/IndexQuiverVamana.h>
 %include <faiss/IndexIVFRaBitQ.h>
 %include <faiss/IndexIVFRaBitQFastScan.h>
 
@@ -867,6 +869,7 @@ typedef int cudaDataType_t;
     DOWNCAST ( IndexRaBitQFastScan )
     DOWNCAST ( IndexRaBitQ )
     DOWNCAST ( IndexQuiver )
+    DOWNCAST ( IndexQuiverVamana )
     DOWNCAST ( IndexIVFRaBitQ )
     DOWNCAST ( IndexIVFRaBitQFastScan )
     DOWNCAST ( IndexIVFIndependentQuantizer)

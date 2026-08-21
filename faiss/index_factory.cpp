@@ -43,6 +43,7 @@
 #include <faiss/IndexPQFastScan.h>
 #include <faiss/IndexPreTransform.h>
 #include <faiss/IndexQuiver.h>
+#include <faiss/IndexQuiverVamana.h>
 #include <faiss/IndexRaBitQ.h>
 #include <faiss/IndexRaBitQFastScan.h>
 #include <faiss/IndexRefine.h>
@@ -1093,6 +1094,16 @@ std::unique_ptr<Index> index_factory_sub(
         if (index) {
             return std::unique_ptr<Index>(index);
         }
+    }
+
+    // QuIVer paper graph: m is half of the layer-0 maximum degree.
+    // Accepts "Vamana32,Quiver" (default m=32) and "Vamana,Quiver".
+    if (re_match(description, "Vamana([0-9]*),Quiver", sm)) {
+        FAISS_THROW_IF_NOT_MSG(
+                metric == METRIC_INNER_PRODUCT,
+                "QuIVer Vamana supports only inner product over normalized vectors");
+        int vamana_m = mres_to_int(sm[1], 32);
+        return std::make_unique<IndexQuiverVamana>(d, vamana_m);
     }
 
     // HNSW variants (it was unclear in the old version that the separator was a

@@ -21,14 +21,14 @@ def parse_args():
     parser.add_argument("--query", required=True, help="float32 .npy queries")
     parser.add_argument("--gt", required=True, help="integer .npy ground truth")
     parser.add_argument("--index", help="read/write the serialized index here")
-    parser.add_argument("--factory", default="HNSW32,Quiver,RFlat")
+    parser.add_argument("--factory", default="Vamana32,Quiver,RFlat")
     parser.add_argument(
         "--refine",
         choices=["none", "sq8"],
         default="none",
         help="optionally add a separately encoded refinement index",
     )
-    parser.add_argument("--ef-construction", type=int, default=40)
+    parser.add_argument("--ef-construction", type=int, default=128)
     parser.add_argument("--ef-search", type=int, nargs="+", default=[16, 32, 64, 128, 256])
     parser.add_argument("--k-factor", type=float, nargs="+", default=[1, 2, 4, 8])
     parser.add_argument("--k", type=int, default=10)
@@ -46,24 +46,50 @@ def mmap_array(path):
     return array
 
 
-def hnsw_of(index):
+def graph_of(index):
     current = faiss.downcast_index(index)
     while hasattr(current, "base_index"):
         current = faiss.downcast_index(current.base_index)
-    if not hasattr(current, "hnsw"):
-        raise TypeError(f"index does not contain HNSW: {type(current).__name__}")
-    return current.hnsw
+    return current
+
+
+def set_construction_ef(index, value):
+    graph = graph_of(index)
+    if hasattr(graph, "hnsw"):
+        graph.hnsw.efConstruction = value
+    elif isinstance(graph, faiss.IndexQuiverVamana):
+        graph.construction_ef = value
+    else:
+        raise TypeError(f"unsupported graph index: {type(graph).__name__}")
+
+
+def set_search_ef(index, value):
+    graph = graph_of(index)
+    if hasattr(graph, "hnsw"):
+        graph.hnsw.efSearch = value
+    elif isinstance(graph, faiss.IndexQuiverVamana):
+        graph.search_ef = value
+    else:
+        raise TypeError(f"unsupported graph index: {type(graph).__name__}")
 
 
 def build_index(args, xb):
     index = faiss.index_factory(
         xb.shape[1], args.factory, faiss.METRIC_INNER_PRODUCT
     )
-    hnsw_of(index).efConstruction = args.ef_construction
+    set_construction_ef(index, args.ef_construction)
     start = time.perf_counter()
-    for begin in range(0, xb.shape[0], args.batch_size):
-        end = min(begin + args.batch_size, xb.shape[0])
-        index.add(np.asarray(xb[begin:end], dtype="float32"))
+    if isinstance(graph_of(index), faiss.IndexQuiverVamana):
+        index.add(np.asarray(xb, dtype="float32"))
+        build_ranges = [(0, xb.shape[0])]
+    else:
+        build_ranges = [
+            (begin, min(begin + args.batch_size, xb.shape[0]))
+            for begin in range(0, xb.shape[0], args.batch_size)
+        ]
+    for begin, end in build_ranges:
+        if not isinstance(graph_of(index), faiss.IndexQuiverVamana):
+            index.add(np.asarray(xb[begin:end], dtype="float32"))
         print(
             json.dumps(
                 {
@@ -162,7 +188,7 @@ def main():
         if factor is not None:
             refine.k_factor = factor
         for ef_search in args.ef_search:
-            hnsw_of(index).efSearch = ef_search
+            set_search_ef(index, ef_search)
             # Discard one complete search so the index pages and code paths are
             # warm before collecting interleaved repeat samples.
             distances, labels = index.search(query, args.k)

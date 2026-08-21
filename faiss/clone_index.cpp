@@ -39,6 +39,7 @@
 #include <faiss/IndexPQFastScan.h>
 #include <faiss/IndexPreTransform.h>
 #include <faiss/IndexQuiver.h>
+#include <faiss/IndexQuiverVamana.h>
 #include <faiss/IndexRefine.h>
 #include <faiss/IndexRowwiseMinMax.h>
 #include <faiss/IndexScalarQuantizer.h>
@@ -161,6 +162,7 @@ IndexNNDescent* clone_IndexNNDescent(const IndexNNDescent* innd) {
 }
 
 IndexNSG* clone_IndexNSG(const IndexNSG* insg) {
+    TRYCLONE(IndexQuiverVamana, insg)
     TRYCLONE(IndexNSGFlat, insg)
     TRYCLONE(IndexNSGPQ, insg)
     TRYCLONE(IndexNSGSQ, insg)

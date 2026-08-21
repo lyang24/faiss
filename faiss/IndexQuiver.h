@@ -47,6 +47,9 @@ struct IndexQuiver : IndexFlatCodes {
 
     FlatCodesDistanceComputer* get_FlatCodesDistanceComputer() const override;
 
+    /// Symmetric non-negative QuIVer penalty between two stored codes.
+    uint32_t code_distance(idx_t i, idx_t j) const;
+
     void search(
             idx_t n,
             const float* x,

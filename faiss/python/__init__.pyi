@@ -3791,6 +3791,24 @@ class IndexQuiver(IndexFlatCodes):
     @overload
     def __init__(self) -> None: ...
     def plane_size(self) -> int: ...
+    def code_distance(self, i: int, j: int) -> int: ...
+
+class SearchParametersQuiverVamana(SearchParameters):
+    search_ef: int
+    def __init__(self) -> None: ...
+
+class IndexQuiverVamana(IndexNSG):
+    m: int
+    construction_ef: int
+    search_ef: int
+    alpha: float
+    random_seed: int
+
+    @overload
+    def __init__(self, d: int, m: int = 32) -> None: ...
+    @overload
+    def __init__(self) -> None: ...
+    def get_degree(self, i: int) -> int: ...
 
 # RaBitQ indices
 class RaBitQSearchParameters(SearchParameters):

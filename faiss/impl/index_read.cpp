@@ -54,6 +54,7 @@
 #include <faiss/IndexPQFastScan.h>
 #include <faiss/IndexPreTransform.h>
 #include <faiss/IndexQuiver.h>
+#include <faiss/IndexQuiverVamana.h>
 #include <faiss/IndexRaBitQ.h>
 #include <faiss/IndexRaBitQFastScan.h>
 #include <faiss/IndexRefine.h>
@@ -2593,6 +2594,33 @@ std::unique_ptr<Index> read_index_up(IOReader* f, int io_flags) {
             storage_pq->pq.compute_sdc_table();
         }
         idx = std::move(idxhnsw);
+    } else if (h == fourcc("IQVm")) {
+        auto idxqv = std::make_unique<IndexQuiverVamana>();
+        read_index_header(*idxqv, f);
+        READ1(idxqv->m);
+        READ1(idxqv->construction_ef);
+        READ1(idxqv->search_ef);
+        READ1(idxqv->alpha);
+        READ1(idxqv->random_seed);
+        read_NSG(idxqv->nsg, f);
+        FAISS_THROW_IF_NOT_FMT(
+                idxqv->nsg.ntotal == idxqv->ntotal,
+                "QuIVer Vamana graph ntotal %d != index ntotal %" PRId64,
+                idxqv->nsg.ntotal,
+                idxqv->ntotal);
+        idxqv->storage = read_index(f, io_flags);
+        idxqv->own_fields = true;
+        FAISS_THROW_IF_NOT_MSG(
+                dynamic_cast<IndexQuiver*>(idxqv->storage),
+                "QuIVer Vamana requires IndexQuiver storage");
+        FAISS_THROW_IF_NOT_FMT(
+                idxqv->storage->ntotal == idxqv->ntotal,
+                "QuIVer Vamana storage ntotal %" PRId64
+                " != index ntotal %" PRId64,
+                idxqv->storage->ntotal,
+                idxqv->ntotal);
+        idxqv->is_built = idxqv->nsg.is_built;
+        idx = std::move(idxqv);
     } else if (
             h == fourcc("INSf") || h == fourcc("INSp") || h == fourcc("INSs")) {
         std::unique_ptr<IndexNSG> idxnsg;

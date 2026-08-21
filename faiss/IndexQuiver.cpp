@@ -168,6 +168,7 @@ void IndexQuiver::train(idx_t, const float*) {
 
 void IndexQuiver::sa_encode(idx_t n, const float* x, uint8_t* bytes) const {
     FAISS_THROW_IF_NOT(is_trained);
+#pragma omp parallel for if (n > 1000)
     for (idx_t i = 0; i < n; ++i) {
         encode_one(d, x + i * d, bytes + static_cast<size_t>(i) * code_size);
     }
@@ -197,6 +198,14 @@ void IndexQuiver::sa_decode(idx_t n, const uint8_t* bytes, float* x) const {
 
 FlatCodesDistanceComputer* IndexQuiver::get_FlatCodesDistanceComputer() const {
     return new QuiverDistanceComputer(codes.data(), code_size, d);
+}
+
+uint32_t IndexQuiver::code_distance(idx_t i, idx_t j) const {
+    FAISS_THROW_IF_NOT(i >= 0 && i < ntotal && j >= 0 && j < ntotal);
+    return static_cast<uint32_t>(-code_similarity(
+            codes.data() + static_cast<size_t>(i) * code_size,
+            codes.data() + static_cast<size_t>(j) * code_size,
+            plane_size()));
 }
 
 void IndexQuiver::search(
