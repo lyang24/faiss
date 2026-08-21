@@ -22,6 +22,12 @@ def parse_args():
     parser.add_argument("--gt", required=True, help="integer .npy ground truth")
     parser.add_argument("--index", help="read/write the serialized index here")
     parser.add_argument("--factory", default="HNSW32,Quiver,RFlat")
+    parser.add_argument(
+        "--refine",
+        choices=["none", "sq8"],
+        default="none",
+        help="optionally add a separately encoded refinement index",
+    )
     parser.add_argument("--ef-construction", type=int, default=40)
     parser.add_argument("--ef-search", type=int, nargs="+", default=[16, 32, 64, 128, 256])
     parser.add_argument("--k-factor", type=float, nargs="+", default=[1, 2, 4, 8])
@@ -68,9 +74,24 @@ def build_index(args, xb):
             ),
             flush=True,
         )
-    if args.index:
-        faiss.write_index(index, args.index)
     return index, time.perf_counter() - start
+
+
+def add_sq8_refinement(base_index, xb, batch_size):
+    refine = faiss.IndexScalarQuantizer(
+        xb.shape[1], faiss.ScalarQuantizer.QT_8bit, faiss.METRIC_INNER_PRODUCT
+    )
+    train_size = min(100_000, xb.shape[0])
+    refine.train(np.asarray(xb[:train_size], dtype="float32"))
+    for begin in range(0, xb.shape[0], batch_size):
+        end = min(begin + batch_size, xb.shape[0])
+        refine.add(np.asarray(xb[begin:end], dtype="float32"))
+    wrapped = faiss.IndexRefine(base_index, refine)
+    # IndexRefine does not own constructor arguments. Keep both Python
+    # references reachable for the lifetime of the benchmark.
+    wrapped._quiver_base_ref = base_index
+    wrapped._quiver_refine_ref = refine
+    return wrapped
 
 
 def recall_at_k(found, truth, k):
@@ -99,6 +120,22 @@ def main():
     else:
         index, build_seconds = build_index(args, xb)
         load_seconds = None
+
+        if args.refine == "sq8":
+            refine_started = time.perf_counter()
+            index = add_sq8_refinement(index, xb, args.batch_size)
+            print(
+                json.dumps(
+                    {
+                        "event": "refine_ready",
+                        "kind": args.refine,
+                        "seconds": time.perf_counter() - refine_started,
+                    }
+                ),
+                flush=True,
+            )
+        if args.index:
+            faiss.write_index(index, args.index)
 
     print(
         json.dumps(
