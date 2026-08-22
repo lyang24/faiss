@@ -20,8 +20,8 @@
 #include <utility>
 #include <vector>
 
+#include <faiss/impl/AuxIndexStructures.h>
 #include <faiss/impl/FaissAssert.h>
-#include <faiss/impl/InterruptCallback.h>
 #include <faiss/impl/VisitedTable.h>
 
 namespace faiss {
