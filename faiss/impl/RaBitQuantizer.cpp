@@ -728,26 +728,40 @@ FlatCodesDistanceComputer* RaBitQuantizer::get_distance_computer(
     // specialization in rabitq_avx512.cpp.
     return with_selected_simd_levels<AVAILABLE_SIMD_LEVELS_A0_SPR>(
             [&]<SIMDLevel SL>() -> FlatCodesDistanceComputer* {
-                if (qb == 0) {
-                    auto dc =
-                            std::make_unique<RaBitQDistanceComputerNotQ<SL>>();
-                    dc->metric_type = metric_type;
-                    dc->d = d;
-                    dc->centroid = centroid_in;
-                    dc->nb_bits = nb_bits;
+                auto make_dc = [&]<SIMDLevel EffectiveSL>()
+                        -> FlatCodesDistanceComputer* {
+                    if (qb == 0) {
+                        auto dc = std::make_unique<
+                                RaBitQDistanceComputerNotQ<EffectiveSL>>();
+                        dc->metric_type = metric_type;
+                        dc->d = d;
+                        dc->centroid = centroid_in;
+                        dc->nb_bits = nb_bits;
 
-                    return dc.release();
-                } else {
-                    auto dc = std::make_unique<RaBitQDistanceComputerQ<SL>>();
-                    dc->metric_type = metric_type;
-                    dc->d = d;
-                    dc->centroid = centroid_in;
-                    dc->qb = qb;
-                    dc->centered = centered;
-                    dc->nb_bits = nb_bits;
+                        return dc.release();
+                    } else {
+                        auto dc = std::make_unique<
+                                RaBitQDistanceComputerQ<EffectiveSL>>();
+                        dc->metric_type = metric_type;
+                        dc->d = d;
+                        dc->centroid = centroid_in;
+                        dc->qb = qb;
+                        dc->centered = centered;
+                        dc->nb_bits = nb_bits;
 
-                    return dc.release();
+                        return dc.release();
+                    }
+                };
+
+                if constexpr (SL == SIMDLevel::ARM_NEON) {
+                    // A sign code shorter than one NEON vector cannot enter
+                    // the vector loop. Select the scalar DC once here instead
+                    // of paying NEON accumulator setup for every candidate.
+                    if (nb_bits == 1 && (d + 7) / 8 < 16) {
+                        return make_dc.template operator()<SIMDLevel::NONE>();
+                    }
                 }
+                return make_dc.template operator()<SL>();
             });
 }
 
