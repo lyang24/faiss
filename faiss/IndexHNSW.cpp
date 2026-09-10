@@ -1191,7 +1191,38 @@ void IndexHNSWRaBitQ::add(idx_t n, const float* x) {
             !fp32_graph_built,
             "cannot append to an IndexHNSWRaBitQ whose graph was batch-built "
             "with FP32 distances; call reset() before rebuilding");
-    IndexHNSW::add(n, x);
+    auto* storage_rabitq = dynamic_cast<IndexRaBitQ*>(storage);
+    FAISS_THROW_IF_NOT_MSG(
+            storage_rabitq, "IndexHNSWRaBitQ requires IndexRaBitQ storage");
+    const RaBitQFullCodeMode mode = storage_rabitq->full_code_mode;
+    if (mode == RABITQ_FULL_CODE_PACKED) {
+        IndexHNSW::add(n, x);
+        return;
+    }
+
+    // Graph construction needs RaBitQ's symmetric packed-code distance. The
+    // expanded full-code scorer intentionally has no staged/symmetric API.
+    storage_rabitq->set_full_code_mode(RABITQ_FULL_CODE_PACKED);
+    hnsw.search_method = storage_rabitq->rabitq.nb_bits >= 2 ? HNSW::SM_RABITQ
+                                                             : HNSW::SM_DEFAULT;
+    try {
+        IndexHNSW::add(n, x);
+    } catch (...) {
+        set_full_code_mode(mode);
+        throw;
+    }
+    set_full_code_mode(mode);
+}
+
+void IndexHNSWRaBitQ::set_full_code_mode(uint8_t mode) {
+    auto* storage_rabitq = dynamic_cast<IndexRaBitQ*>(storage);
+    FAISS_THROW_IF_NOT_MSG(
+            storage_rabitq, "IndexHNSWRaBitQ requires IndexRaBitQ storage");
+    storage_rabitq->set_full_code_mode(mode);
+    hnsw.search_method = mode == RABITQ_FULL_CODE_PACKED &&
+                    storage_rabitq->rabitq.nb_bits >= 2
+            ? HNSW::SM_RABITQ
+            : HNSW::SM_DEFAULT;
 }
 
 void IndexHNSWRaBitQ::add_with_fp32_graph(idx_t n, const float* x) {
@@ -1237,6 +1268,14 @@ void IndexHNSWRaBitQ::add_with_fp32_graph(idx_t n, const float* x) {
 void IndexHNSWRaBitQ::reset() {
     IndexHNSW::reset();
     fp32_graph_built = false;
+}
+
+void IndexHNSWRaBitQ::permute_entries(const idx_t* perm) {
+    auto* storage_rabitq = dynamic_cast<IndexRaBitQ*>(storage);
+    FAISS_THROW_IF_NOT_MSG(
+            storage_rabitq, "IndexHNSWRaBitQ requires IndexRaBitQ storage");
+    storage_rabitq->permute_entries(perm);
+    hnsw.permute_entries(perm);
 }
 
 /**************************************************************
