@@ -131,6 +131,7 @@ set(FAISS_SRC
   IndexAdditiveQuantizerFastScan.cpp
   IndexIVFIndependentQuantizer.cpp
   IndexPQFastScan.cpp
+  IndexQINCo.cpp
   IndexPreTransform.cpp
   IndexRaBitQ.cpp
   IndexRaBitQFastScan.cpp
@@ -264,6 +265,7 @@ set(FAISS_HEADERS
   IndexFastScan.h
   IndexAdditiveQuantizerFastScan.h
   IndexPQFastScan.h
+  IndexQINCo.h
   IndexPreTransform.h
   IndexRefine.h
   IndexReplicas.h
