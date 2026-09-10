@@ -1,0 +1,47 @@
+{"args": {"base": "/home/ubuntu/data/cohere_medium_1m/train_f32_norm.npy", "batch1_iterations": 200, "bits": 7, "block_size": 64, "dataset": "cohere-1m-768d-normalized", "ef": [16, 24, 32, 48, 64, 96, 128, 192, 256], "floors": [0.9, 0.95], "graph": "/home/ubuntu/qinco_graphs/cohere_hnsw_M32_efc100.faissindex", "nb": 1000000, "normalize": false, "nq": 1000, "output": "/home/ubuntu/rabitq_results/combined_cohere1m.jsonl", "query": "/home/ubuntu/data/cohere_medium_1m/test_f32_norm.npy", "threads": 16, "transform_threads": 16}, "base_sha256": "e778c1519a291cd9170c97c45367a0aa63461c445dcc5cbc77a700f55cae4137", "blas_env": "1", "compile": "OPTIMIZE ARM_SVE ", "dataset": "cohere-1m-768d-normalized", "graph_bytes": 272129288, "graph_load_seconds": 0.8906838049988437, "graph_sha256": "6e889dea1ad777986bf3117d44ba08cdc7bc61722de9cf29df41c51d3d5017d0", "ground_truth_seconds": 25.68709329199919, "ground_truth_sha256": "c0ff828ea8cce210951d73d98ac37e2dcc325f599e85ad4dae24917503f9037c", "kind": "metadata", "m": 32, "omp_env": "16", "platform": "Linux-7.0.0-1011-aws-aarch64-with-glibc2.39", "query_sha256": "d55f287cfab51d7457d7a321111fae7b6499d5669682a201a58e26a1bc4bbb7b"}
+{"code_bytes": 768000000, "code_size": 768, "kind": "build", "seconds": 0.49258196300070267, "serving_bytes": 1040129288, "variant": "sq8"}
+{"expanded_bytes": 776000000, "expanded_code_size": 776, "kind": "build", "native_dotprod": true, "packed_bytes": 692000000, "packed_code_size": 692, "seconds": 33.21631505099867, "serving_bytes": 1740129288, "variant": "rabitq_combined"}
+{"ef": 16, "kind": "sweep", "qps": 57583.18091745889, "recall_at_10": 0.861, "seconds": 0.017366182000841945, "variant": "sq8"}
+{"ef": 24, "kind": "sweep", "qps": 46843.03475422347, "recall_at_10": 0.8911, "seconds": 0.021347890999095398, "variant": "sq8"}
+{"ef": 32, "kind": "sweep", "qps": 38752.66637583369, "recall_at_10": 0.9122, "seconds": 0.025804676000916515, "variant": "sq8"}
+{"ef": 48, "kind": "sweep", "qps": 28663.858048342696, "recall_at_10": 0.9379, "seconds": 0.03488713899969298, "variant": "sq8"}
+{"ef": 64, "kind": "sweep", "qps": 23096.610094517247, "recall_at_10": 0.9558, "seconds": 0.043296396999721765, "variant": "sq8"}
+{"ef": 96, "kind": "sweep", "qps": 16248.400872735589, "recall_at_10": 0.9663, "seconds": 0.06154451800102834, "variant": "sq8"}
+{"ef": 128, "kind": "sweep", "qps": 12691.47259808505, "recall_at_10": 0.9718, "seconds": 0.07879306300128519, "variant": "sq8"}
+{"ef": 192, "kind": "sweep", "qps": 8279.332696679658, "recall_at_10": 0.9772, "seconds": 0.12078268100049172, "variant": "sq8"}
+{"ef": 256, "kind": "sweep", "qps": 6460.072514022187, "recall_at_10": 0.9822, "seconds": 0.15479702400079987, "variant": "sq8"}
+{"ef": 16, "kind": "sweep", "qps": 123845.43543228533, "recall_at_10": 0.8612, "seconds": 0.008074581000983017, "variant": "rabitq_combined"}
+{"ef": 24, "kind": "sweep", "qps": 102440.3651026562, "recall_at_10": 0.8933, "seconds": 0.009761777000676375, "variant": "rabitq_combined"}
+{"ef": 32, "kind": "sweep", "qps": 85453.76160695773, "recall_at_10": 0.9134, "seconds": 0.011702235000484507, "variant": "rabitq_combined"}
+{"ef": 48, "kind": "sweep", "qps": 65347.044098973085, "recall_at_10": 0.9376, "seconds": 0.015302911000617314, "variant": "rabitq_combined"}
+{"ef": 64, "kind": "sweep", "qps": 52912.872132205186, "recall_at_10": 0.955, "seconds": 0.018898992999311304, "variant": "rabitq_combined"}
+{"ef": 96, "kind": "sweep", "qps": 39192.76695873547, "recall_at_10": 0.9661, "seconds": 0.02551491200028977, "variant": "rabitq_combined"}
+{"ef": 128, "kind": "sweep", "qps": 30389.80055125068, "recall_at_10": 0.9717, "seconds": 0.03290577699954156, "variant": "rabitq_combined"}
+{"ef": 192, "kind": "sweep", "qps": 20508.595532315783, "recall_at_10": 0.9766, "seconds": 0.04876004299876513, "variant": "rabitq_combined"}
+{"ef": 256, "kind": "sweep", "qps": 15865.59606281431, "recall_at_10": 0.9815, "seconds": 0.06302946299911127, "variant": "rabitq_combined"}
+{"ef": 32, "floor": 0.9, "kind": "selection", "recall_at_10": 0.9122, "variant": "sq8"}
+{"ef": 32, "floor": 0.9, "kind": "selection", "recall_at_10": 0.9134, "variant": "rabitq_combined"}
+{"ef": 64, "floor": 0.95, "kind": "selection", "recall_at_10": 0.9558, "variant": "sq8"}
+{"ef": 64, "floor": 0.95, "kind": "selection", "recall_at_10": 0.955, "variant": "rabitq_combined"}
+{"ef": 32, "floor": 0.9, "kind": "confirmation", "position": 0, "qps": 38978.43903819135, "recall_at_10": 0.9122, "round": 0, "seconds": 0.025655208999523893, "variant": "sq8"}
+{"ef": 32, "floor": 0.9, "kind": "confirmation", "position": 1, "qps": 87509.55933142173, "recall_at_10": 0.9134, "round": 0, "seconds": 0.011427322999224998, "variant": "rabitq_combined"}
+{"ef": 32, "floor": 0.9, "kind": "confirmation", "position": 2, "qps": 38939.61054528628, "recall_at_10": 0.9122, "round": 0, "seconds": 0.02568079099910392, "variant": "sq8"}
+{"ef": 32, "floor": 0.9, "kind": "confirmation", "position": 0, "qps": 39054.406889857935, "recall_at_10": 0.9122, "round": 1, "seconds": 0.02560530499977176, "variant": "sq8"}
+{"ef": 32, "floor": 0.9, "kind": "confirmation", "position": 1, "qps": 88927.43201252795, "recall_at_10": 0.9134, "round": 1, "seconds": 0.011245124000197393, "variant": "rabitq_combined"}
+{"ef": 32, "floor": 0.9, "kind": "confirmation", "position": 2, "qps": 39016.32661782661, "recall_at_10": 0.9122, "round": 1, "seconds": 0.02563029599878064, "variant": "sq8"}
+{"ef": 32, "floor": 0.9, "kind": "confirmation", "position": 0, "qps": 39099.895382055074, "recall_at_10": 0.9122, "round": 2, "seconds": 0.025575516001481446, "variant": "sq8"}
+{"ef": 32, "floor": 0.9, "kind": "confirmation", "position": 1, "qps": 85071.21055727241, "recall_at_10": 0.9134, "round": 2, "seconds": 0.011754858000131208, "variant": "rabitq_combined"}
+{"ef": 32, "floor": 0.9, "kind": "confirmation", "position": 2, "qps": 38969.93574761016, "recall_at_10": 0.9122, "round": 2, "seconds": 0.025660806999439956, "variant": "sq8"}
+{"ef": 32, "floor": 0.9, "iterations_per_sample": 200, "kind": "batch1", "qps": 3823.8382935160917, "recall_at_10": 1.0, "seconds_samples": [0.052303467000456294, 0.05217490699942573, 0.052520856999763055], "variant": "sq8"}
+{"ef": 32, "floor": 0.9, "iterations_per_sample": 200, "kind": "batch1", "qps": 9907.871164783066, "recall_at_10": 1.0, "seconds_samples": [0.02066446100070607, 0.02011650199892756, 0.020185970999591518], "variant": "rabitq_combined"}
+{"ef": 64, "floor": 0.95, "kind": "confirmation", "position": 0, "qps": 23112.92608232518, "recall_at_10": 0.9558, "round": 0, "seconds": 0.0432658329991682, "variant": "sq8"}
+{"ef": 64, "floor": 0.95, "kind": "confirmation", "position": 1, "qps": 54505.80107825875, "recall_at_10": 0.955, "round": 0, "seconds": 0.01834667100047227, "variant": "rabitq_combined"}
+{"ef": 64, "floor": 0.95, "kind": "confirmation", "position": 2, "qps": 23068.61003778243, "recall_at_10": 0.9558, "round": 0, "seconds": 0.04334894899875508, "variant": "sq8"}
+{"ef": 64, "floor": 0.95, "kind": "confirmation", "position": 0, "qps": 23073.04804696347, "recall_at_10": 0.9558, "round": 1, "seconds": 0.04334061100053077, "variant": "sq8"}
+{"ef": 64, "floor": 0.95, "kind": "confirmation", "position": 1, "qps": 54761.72352395926, "recall_at_10": 0.955, "round": 1, "seconds": 0.018260930000906228, "variant": "rabitq_combined"}
+{"ef": 64, "floor": 0.95, "kind": "confirmation", "position": 2, "qps": 23035.180848687796, "recall_at_10": 0.9558, "round": 1, "seconds": 0.043411857999672065, "variant": "sq8"}
+{"ef": 64, "floor": 0.95, "kind": "confirmation", "position": 0, "qps": 23162.57811235847, "recall_at_10": 0.9558, "round": 2, "seconds": 0.04317308700046851, "variant": "sq8"}
+{"ef": 64, "floor": 0.95, "kind": "confirmation", "position": 1, "qps": 53113.494454465406, "recall_at_10": 0.955, "round": 2, "seconds": 0.018827607000275748, "variant": "rabitq_combined"}
+{"ef": 64, "floor": 0.95, "kind": "confirmation", "position": 2, "qps": 23036.958561407784, "recall_at_10": 0.9558, "round": 2, "seconds": 0.043408507999629364, "variant": "sq8"}
+{"ef": 64, "floor": 0.95, "iterations_per_sample": 200, "kind": "batch1", "qps": 1817.0642245718457, "recall_at_10": 1.0, "seconds_samples": [0.1100676559999556, 0.10960434800108487, 0.11073639800088131], "variant": "sq8"}
+{"ef": 64, "floor": 0.95, "iterations_per_sample": 200, "kind": "batch1", "qps": 6946.270734770578, "recall_at_10": 1.0, "seconds_samples": [0.02935914000045159, 0.028792428000087966, 0.028633834001084324], "variant": "rabitq_combined"}

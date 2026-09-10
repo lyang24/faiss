@@ -1,0 +1,47 @@
+{"args": {"base": "/home/ubuntu/data/dbpedia_openai/vectors.npy", "batch1_iterations": 200, "bits": 7, "block_size": 64, "dataset": "dbpedia-openai-975k-1536d-normalized", "ef": [16, 24, 32, 48, 64, 96, 128, 192, 256], "floors": [0.9, 0.95], "graph": "/home/ubuntu/qinco_graphs/dbpedia_hnsw_M32_efc100.faissindex", "nb": 975000, "normalize": false, "nq": 1000, "nt": 100000, "output": "/home/ubuntu/rabitq_results/combined_dbpedia_openai.jsonl", "query": "/home/ubuntu/data/dbpedia_openai/dbpedia_query.fvecs", "threads": 16, "train": null, "transform_threads": 16}, "base_sha256": "aa165efe645255afb146c182b120216868113fac5128d7477618b357a38c11d2", "blas_env": "1", "compile": "OPTIMIZE ARM_SVE ", "dataset": "dbpedia-openai-975k-1536d-normalized", "graph_bytes": 265323432, "graph_load_seconds": 1.6160681229994225, "graph_sha256": "0cbec877465491d14760214c186d94058df3a9a2439196e184baaeca6c7ce7a0", "ground_truth_seconds": 49.70133353100027, "ground_truth_sha256": "b4d01c15bf87f537563c7acf2fc265e17e7c432ea07c96bf38f4b7a3eebeaa3c", "kind": "metadata", "m": 32, "omp_env": "16", "platform": "Linux-7.0.0-1011-aws-aarch64-with-glibc2.39", "query_sha256": "a73e9dabf8ab4616a43e5e505286b928c6d8bc93f1e2493cddf98d7912bdf743", "train_sha256": null, "train_shape": null}
+{"code_bytes": 1497600000, "code_size": 1536, "kind": "build", "seconds": 0.8886538509977981, "serving_bytes": 1762923432, "variant": "sq8"}
+{"expanded_bytes": 1505400000, "expanded_code_size": 1544, "kind": "build", "native_dotprod": true, "packed_bytes": 1329900000, "packed_code_size": 1364, "seconds": 101.75937295400217, "serving_bytes": 3100623432, "variant": "rabitq_combined"}
+{"ef": 16, "kind": "sweep", "qps": 29836.763962347173, "recall_at_10": 0.857, "seconds": 0.033515698996779975, "variant": "sq8"}
+{"ef": 24, "kind": "sweep", "qps": 23689.605896260393, "recall_at_10": 0.9038, "seconds": 0.04221260600024834, "variant": "sq8"}
+{"ef": 32, "kind": "sweep", "qps": 19747.902230316424, "recall_at_10": 0.9238, "seconds": 0.050638289998460095, "variant": "sq8"}
+{"ef": 48, "kind": "sweep", "qps": 14667.808820127279, "recall_at_10": 0.943, "seconds": 0.068176508997567, "variant": "sq8"}
+{"ef": 64, "kind": "sweep", "qps": 11712.091172978486, "recall_at_10": 0.9589, "seconds": 0.08538184899953194, "variant": "sq8"}
+{"ef": 96, "kind": "sweep", "qps": 8260.346699573896, "recall_at_10": 0.9676, "seconds": 0.12106029400092666, "variant": "sq8"}
+{"ef": 128, "kind": "sweep", "qps": 6657.7366445195175, "recall_at_10": 0.9741, "seconds": 0.15020119499968132, "variant": "sq8"}
+{"ef": 192, "kind": "sweep", "qps": 4529.142365788877, "recall_at_10": 0.9793, "seconds": 0.22079235299679567, "variant": "sq8"}
+{"ef": 256, "kind": "sweep", "qps": 3526.4491533050677, "recall_at_10": 0.9825, "seconds": 0.2835713649983518, "variant": "sq8"}
+{"ef": 16, "kind": "sweep", "qps": 57893.14904757345, "recall_at_10": 0.8583, "seconds": 0.01727320099962526, "variant": "rabitq_combined"}
+{"ef": 24, "kind": "sweep", "qps": 51255.54296757595, "recall_at_10": 0.9031, "seconds": 0.01951008499963791, "variant": "rabitq_combined"}
+{"ef": 32, "kind": "sweep", "qps": 44389.56907431073, "recall_at_10": 0.9236, "seconds": 0.02252781499919365, "variant": "rabitq_combined"}
+{"ef": 48, "kind": "sweep", "qps": 36515.46234570618, "recall_at_10": 0.9427, "seconds": 0.027385658999264706, "variant": "rabitq_combined"}
+{"ef": 64, "kind": "sweep", "qps": 31273.148968486952, "recall_at_10": 0.9591, "seconds": 0.031976313002815004, "variant": "rabitq_combined"}
+{"ef": 96, "kind": "sweep", "qps": 23442.459546088587, "recall_at_10": 0.9684, "seconds": 0.042657639998651575, "variant": "rabitq_combined"}
+{"ef": 128, "kind": "sweep", "qps": 19880.11337276996, "recall_at_10": 0.9749, "seconds": 0.0503015240028617, "variant": "rabitq_combined"}
+{"ef": 192, "kind": "sweep", "qps": 13999.709814486336, "recall_at_10": 0.98, "seconds": 0.071430051997595, "variant": "rabitq_combined"}
+{"ef": 256, "kind": "sweep", "qps": 11151.87654788656, "recall_at_10": 0.9832, "seconds": 0.08967100700101582, "variant": "rabitq_combined"}
+{"ef": 24, "floor": 0.9, "kind": "selection", "recall_at_10": 0.9038, "variant": "sq8"}
+{"ef": 24, "floor": 0.9, "kind": "selection", "recall_at_10": 0.9031, "variant": "rabitq_combined"}
+{"ef": 64, "floor": 0.95, "kind": "selection", "recall_at_10": 0.9589, "variant": "sq8"}
+{"ef": 64, "floor": 0.95, "kind": "selection", "recall_at_10": 0.9591, "variant": "rabitq_combined"}
+{"ef": 24, "floor": 0.9, "kind": "confirmation", "position": 0, "qps": 23587.703361118536, "recall_at_10": 0.9038, "round": 0, "seconds": 0.042394971002067905, "variant": "sq8"}
+{"ef": 24, "floor": 0.9, "kind": "confirmation", "position": 1, "qps": 51260.203926888425, "recall_at_10": 0.9031, "round": 0, "seconds": 0.019508310997480294, "variant": "rabitq_combined"}
+{"ef": 24, "floor": 0.9, "kind": "confirmation", "position": 2, "qps": 23448.088826626823, "recall_at_10": 0.9038, "round": 0, "seconds": 0.04264739900099812, "variant": "sq8"}
+{"ef": 24, "floor": 0.9, "kind": "confirmation", "position": 0, "qps": 23547.298291783103, "recall_at_10": 0.9038, "round": 1, "seconds": 0.04246771700127283, "variant": "sq8"}
+{"ef": 24, "floor": 0.9, "kind": "confirmation", "position": 1, "qps": 50977.10622666043, "recall_at_10": 0.9031, "round": 1, "seconds": 0.019616649002273334, "variant": "rabitq_combined"}
+{"ef": 24, "floor": 0.9, "kind": "confirmation", "position": 2, "qps": 23664.370504730843, "recall_at_10": 0.9038, "round": 1, "seconds": 0.04225762100031716, "variant": "sq8"}
+{"ef": 24, "floor": 0.9, "kind": "confirmation", "position": 0, "qps": 23608.243299419584, "recall_at_10": 0.9038, "round": 2, "seconds": 0.04235808600060409, "variant": "sq8"}
+{"ef": 24, "floor": 0.9, "kind": "confirmation", "position": 1, "qps": 51231.24564383508, "recall_at_10": 0.9031, "round": 2, "seconds": 0.019519338002282893, "variant": "rabitq_combined"}
+{"ef": 24, "floor": 0.9, "kind": "confirmation", "position": 2, "qps": 23649.13872892034, "recall_at_10": 0.9038, "round": 2, "seconds": 0.04228483800034155, "variant": "sq8"}
+{"ef": 24, "floor": 0.9, "iterations_per_sample": 200, "kind": "batch1", "qps": 2352.9265330288436, "recall_at_10": 1.0, "seconds_samples": [0.08506325700000161, 0.08500052899762522, 0.084953809997387], "variant": "sq8"}
+{"ef": 24, "floor": 0.9, "iterations_per_sample": 200, "kind": "batch1", "qps": 2760.1404801645854, "recall_at_10": 1.0, "seconds_samples": [0.07526536499790382, 0.07246007999856374, 0.07131370700153639], "variant": "rabitq_combined"}
+{"ef": 64, "floor": 0.95, "kind": "confirmation", "position": 0, "qps": 11763.272700485308, "recall_at_10": 0.9589, "round": 0, "seconds": 0.08501035600056639, "variant": "sq8"}
+{"ef": 64, "floor": 0.95, "kind": "confirmation", "position": 1, "qps": 30147.842912368098, "recall_at_10": 0.9591, "round": 0, "seconds": 0.03316986899881158, "variant": "rabitq_combined"}
+{"ef": 64, "floor": 0.95, "kind": "confirmation", "position": 2, "qps": 11711.615338628118, "recall_at_10": 0.9589, "round": 0, "seconds": 0.0853853180014994, "variant": "sq8"}
+{"ef": 64, "floor": 0.95, "kind": "confirmation", "position": 0, "qps": 11748.317393944335, "recall_at_10": 0.9589, "round": 1, "seconds": 0.08511857200210216, "variant": "sq8"}
+{"ef": 64, "floor": 0.95, "kind": "confirmation", "position": 1, "qps": 30485.49894696686, "recall_at_10": 0.9591, "round": 1, "seconds": 0.0328024810005445, "variant": "rabitq_combined"}
+{"ef": 64, "floor": 0.95, "kind": "confirmation", "position": 2, "qps": 11800.068884207916, "recall_at_10": 0.9589, "round": 1, "seconds": 0.08474526799909654, "variant": "sq8"}
+{"ef": 64, "floor": 0.95, "kind": "confirmation", "position": 0, "qps": 11807.625350709708, "recall_at_10": 0.9589, "round": 2, "seconds": 0.08469103399693267, "variant": "sq8"}
+{"ef": 64, "floor": 0.95, "kind": "confirmation", "position": 1, "qps": 31113.606699342978, "recall_at_10": 0.9591, "round": 2, "seconds": 0.032140278999577276, "variant": "rabitq_combined"}
+{"ef": 64, "floor": 0.95, "kind": "confirmation", "position": 2, "qps": 11794.955920145783, "recall_at_10": 0.9589, "round": 2, "seconds": 0.08478200399986235, "variant": "sq8"}
+{"ef": 64, "floor": 0.95, "iterations_per_sample": 200, "kind": "batch1", "qps": 1132.9201320672637, "recall_at_10": 1.0, "seconds_samples": [0.17653495099875727, 0.1755822929990245, 0.17663672900016536], "variant": "sq8"}
+{"ef": 64, "floor": 0.95, "iterations_per_sample": 200, "kind": "batch1", "qps": 2117.7416945073032, "recall_at_10": 1.0, "seconds_samples": [0.09357039999667904, 0.09503792899704422, 0.09444022399839014], "variant": "rabitq_combined"}
