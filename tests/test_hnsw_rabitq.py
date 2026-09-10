@@ -423,6 +423,39 @@ class TestHNSWRaBitQ(unittest.TestCase):
             metadata_only.hnsw.search_method,
         )
 
+    def test_parallel_rotation_preserves_rabitq_search(self):
+        xt, xb, xq = self.make_data(nq=1000)
+        rotation = faiss.RandomRotationMatrix(xt.shape[1], xt.shape[1])
+        rotation.init(1234)
+        xt_rotated = rotation.apply_py(xt)
+        xb_rotated = rotation.apply_py(xb)
+
+        index = faiss.IndexHNSWRaBitQ(
+            xt.shape[1], 8, 7, faiss.METRIC_L2
+        )
+        index.hnsw.efConstruction = 40
+        index.train(xt_rotated)
+        index.add_with_fp32_graph(xb_rotated)
+        index.set_full_code_mode(faiss.RABITQ_FULL_CODE_INT8)
+        transformed = faiss.IndexPreTransform(rotation, index)
+
+        inner = faiss.SearchParametersHNSW(efSearch=128)
+        outer = faiss.SearchParametersPreTransform()
+        outer.index_params = inner
+        outer.transform_threads = 4
+        outer.transform_block_size = 64
+        for nq in (1, 7, 63, 64, 65, 127, 128, 129, 1000):
+            Dserial, Iserial = transformed.search(
+                xq[:nq], 10, params=inner
+            )
+            Dparallel, Iparallel = transformed.search(
+                xq[:nq], 10, params=outer
+            )
+            np.testing.assert_array_equal(Iparallel, Iserial)
+            np.testing.assert_allclose(
+                Dparallel, Dserial, rtol=1e-6, atol=1e-6
+            )
+
     def test_unsupported_metric_throws(self):
         for metric in (faiss.METRIC_INNER_PRODUCT, faiss.METRIC_L1):
             with self.assertRaises(RuntimeError):
