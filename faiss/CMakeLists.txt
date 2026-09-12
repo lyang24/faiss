@@ -50,6 +50,7 @@ set(FAISS_SIMD_AVX512_VPOPCNT_SRC
 set(FAISS_SIMD_AVX512_SPR_SRC
   impl/scalar_quantizer/sq-avx512-spr.cpp
   utils/simd_impl/rabitq_integer_adc_avx512.cpp
+  utils/simd_impl/fp16_linear_transform_avx512.cpp
 )
 set(FAISS_SIMD_NEON_SRC
   impl/fast_scan/impl-neon.cpp
@@ -63,6 +64,7 @@ set(FAISS_SIMD_NEON_SRC
   utils/distances_fused/simdlib_based_neon.cpp
   utils/simd_impl/rabitq_neon.cpp
   utils/simd_impl/rabitq_integer_adc_neon.cpp
+  utils/simd_impl/fp16_linear_transform_neon.cpp
 )
 set(FAISS_SIMD_SVE_SRC
   impl/pq_code_distance/pq_code_distance-sve.cpp
@@ -376,6 +378,7 @@ set(FAISS_HEADERS
   utils/fp16-inl.h
   utils/fp16-arm.h
   utils/fp16.h
+  utils/fp16_linear_transform.h
   utils/hamming-inl.h
   utils/hamming.h
   utils/ordered_key_value.h
@@ -448,6 +451,10 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "(aarch64|arm64|ARM64)" AND NOT MSVC)
   # ordinary NEON builds must remain executable on CPUs without ASIMDDP.
   set_source_files_properties(utils/simd_impl/rabitq_integer_adc_neon.cpp
     PROPERTIES COMPILE_OPTIONS "-march=armv8.2-a+dotprod")
+  # Isolate optional FP16 FML instructions in a runtime-gated translation
+  # unit so the ordinary NEON build remains usable on older ARM CPUs.
+  set_source_files_properties(utils/simd_impl/fp16_linear_transform_neon.cpp
+    PROPERTIES COMPILE_OPTIONS "-march=armv8.2-a+fp16fml")
 endif()
 
 # Detect BMI2 compiler support.

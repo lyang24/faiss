@@ -27,6 +27,11 @@ struct SearchParametersPreTransform : SearchParameters {
 
     /// Number of queries transformed by each parallel task.
     idx_t transform_block_size = 64;
+
+    /** Use a prepared FP16 cache for a single-query transform.
+     * Larger batches retain the ordinary FP32 transform path.
+     */
+    bool use_fp16_transform = false;
 };
 
 /** Index that applies a LinearTransform transform on vectors before
@@ -109,6 +114,9 @@ struct IndexPreTransform : Index {
             const float* x,
             int transform_threads,
             idx_t block_size) const;
+
+    /// Apply a chain of prepared FP16 linear transforms.
+    const float* apply_chain_fp16(idx_t n, const float* x) const;
 
     /// Reverse the transforms in the chain. May not be implemented for
     /// all transforms in the chain or may return approximate results.

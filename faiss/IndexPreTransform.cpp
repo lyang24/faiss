@@ -187,6 +187,28 @@ const float* IndexPreTransform::apply_chain_parallel(
     return previous_owner.release();
 }
 
+const float* IndexPreTransform::apply_chain_fp16(idx_t n, const float* x)
+        const {
+    FAISS_THROW_IF_NOT_MSG(n >= 0, "negative vector count");
+    if (chain.empty()) {
+        return x;
+    }
+    const float* prev_x = x;
+    std::unique_ptr<const float[]> previous_owner;
+    for (const VectorTransform* transform : chain) {
+        const auto* linear = dynamic_cast<const LinearTransform*>(transform);
+        FAISS_THROW_IF_NOT_MSG(
+                linear != nullptr,
+                "FP16 query transforms require a LinearTransform chain");
+        auto transformed = std::make_unique<float[]>(size_t(n) * linear->d_out);
+        linear->apply_noalloc_fp16(n, prev_x, transformed.get());
+        previous_owner.reset();
+        prev_x = transformed.get();
+        previous_owner = std::move(transformed);
+    }
+    return previous_owner.release();
+}
+
 void IndexPreTransform::reverse_chain(idx_t n, const float* xt, float* x)
         const {
     const float* next_x = xt;
@@ -232,6 +254,9 @@ const float* apply_chain_for_search(
         const float* x,
         const SearchParameters* params_in) {
     auto params = dynamic_cast<const SearchParametersPreTransform*>(params_in);
+    if (params && params->use_fp16_transform && n == 1) {
+        return index.apply_chain_fp16(n, x);
+    }
     if (!params || params->transform_threads == 0) {
         return index.apply_chain(n, x);
     }
