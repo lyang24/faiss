@@ -649,6 +649,149 @@ void HadamardRotation::check_identical(const VectorTransform& other) const {
 }
 
 /*********************************************
+ * BlockHadamardRotation
+ *********************************************/
+
+static size_t largest_power_of_two_not_above(size_t n) {
+    FAISS_THROW_IF_NOT_MSG(n > 0, "Hadamard block dimension must be positive");
+    size_t result = 1;
+    while (result <= n / 2) {
+        result *= 2;
+    }
+    return result;
+}
+
+static void block_fwht_inplace(float* values, size_t d) {
+    size_t offset = 0;
+    size_t remaining = d;
+    while (remaining > 0) {
+        const size_t block_size = largest_power_of_two_not_above(remaining);
+        fwht_inplace(values + offset, block_size);
+        const float scale = 1.0f / std::sqrt(static_cast<float>(block_size));
+        for (size_t j = 0; j < block_size; ++j) {
+            values[offset + j] *= scale;
+        }
+        offset += block_size;
+        remaining -= block_size;
+    }
+}
+
+static void check_block_hadamard_metadata_shape(
+        int d_in,
+        int d_out,
+        const std::vector<int32_t>& permutation,
+        const std::vector<float>& signs) {
+    FAISS_THROW_IF_NOT_MSG(
+            d_in > 0 && d_in == d_out,
+            "BlockHadamardRotation requires matching positive dimensions");
+    const size_t d = static_cast<size_t>(d_in);
+    FAISS_THROW_IF_NOT_MSG(
+            permutation.size() == d,
+            "BlockHadamardRotation permutation size must match dimension");
+    FAISS_THROW_IF_NOT_MSG(
+            signs.size() == d,
+            "BlockHadamardRotation sign size must match dimension");
+}
+
+BlockHadamardRotation::BlockHadamardRotation(int d, uint32_t seed_in)
+        : VectorTransform(d, d), seed(seed_in) {
+    init(seed_in);
+}
+
+void BlockHadamardRotation::init(uint32_t seed_in) {
+    FAISS_THROW_IF_NOT_MSG(
+            d_in > 0 && d_in == d_out,
+            "BlockHadamardRotation requires matching positive dimensions");
+    seed = seed_in;
+    const size_t d = static_cast<size_t>(d_in);
+    std::vector<int32_t> new_permutation(d);
+    std::vector<float> new_signs(d);
+    for (size_t j = 0; j < d; ++j) {
+        new_permutation[j] = static_cast<int32_t>(j);
+    }
+
+    SplitMix64RandomGenerator rng(seed);
+    for (size_t j = 0; j + 1 < d; ++j) {
+        const size_t other =
+                j + static_cast<size_t>(rng.rand_int(static_cast<int>(d - j)));
+        std::swap(new_permutation[j], new_permutation[other]);
+    }
+    for (size_t j = 0; j < d; ++j) {
+        new_signs[j] = rng.rand_int(2) == 0 ? -1.0f : 1.0f;
+    }
+
+    permutation.swap(new_permutation);
+    signs.swap(new_signs);
+    is_trained = true;
+}
+
+void BlockHadamardRotation::train(idx_t, const float*) {
+    init(seed);
+}
+
+void BlockHadamardRotation::apply_noalloc(idx_t n, const float* x, float* xt)
+        const {
+    FAISS_THROW_IF_NOT_MSG(is_trained, "Transformation not trained yet");
+    FAISS_THROW_IF_NOT_MSG(n >= 0, "negative vector count");
+    check_block_hadamard_metadata_shape(d_in, d_out, permutation, signs);
+    const size_t d = static_cast<size_t>(d_in);
+
+    std::vector<float> aliased_input;
+    if (x == xt && n > 0) {
+        aliased_input.resize(d);
+    }
+    for (idx_t i = 0; i < n; ++i) {
+        const float* input = x + static_cast<size_t>(i) * d;
+        float* output = xt + static_cast<size_t>(i) * d;
+        if (x == xt) {
+            std::memcpy(aliased_input.data(), input, d * sizeof(float));
+            input = aliased_input.data();
+        }
+        for (size_t j = 0; j < d; ++j) {
+            output[j] = signs[j] * input[permutation[j]];
+        }
+        block_fwht_inplace(output, d);
+    }
+}
+
+void BlockHadamardRotation::reverse_transform(
+        idx_t n,
+        const float* xt,
+        float* x) const {
+    FAISS_THROW_IF_NOT_MSG(is_trained, "Transformation not trained yet");
+    FAISS_THROW_IF_NOT_MSG(n >= 0, "negative vector count");
+    check_block_hadamard_metadata_shape(d_in, d_out, permutation, signs);
+    const size_t d = static_cast<size_t>(d_in);
+    std::vector<float> scratch(d);
+
+    for (idx_t i = 0; i < n; ++i) {
+        const float* input = xt + static_cast<size_t>(i) * d;
+        float* output = x + static_cast<size_t>(i) * d;
+        std::memcpy(scratch.data(), input, d * sizeof(float));
+        block_fwht_inplace(scratch.data(), d);
+        for (size_t j = 0; j < d; ++j) {
+            output[permutation[j]] = signs[j] * scratch[j];
+        }
+    }
+}
+
+void BlockHadamardRotation::check_identical(
+        const VectorTransform& other) const {
+    const auto* bhr = dynamic_cast<const BlockHadamardRotation*>(&other);
+    FAISS_THROW_IF_NOT_MSG(bhr, "failed to cast to BlockHadamardRotation");
+    FAISS_THROW_IF_NOT_MSG(
+            d_in == bhr->d_in && d_out == bhr->d_out,
+            "BlockHadamardRotation dimensions must match");
+    FAISS_THROW_IF_NOT_MSG(
+            seed == bhr->seed, "BlockHadamardRotation seeds must match");
+    FAISS_THROW_IF_NOT_MSG(
+            permutation == bhr->permutation,
+            "BlockHadamardRotation permutations must match");
+    FAISS_THROW_IF_NOT_MSG(
+            signs == bhr->signs, "BlockHadamardRotation signs must match");
+}
+
+/*********************************************
  * PCAMatrix
  *********************************************/
 
