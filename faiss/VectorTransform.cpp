@@ -625,13 +625,22 @@ static void normalized_fwht_inplace(float* values, size_t n, float scale) {
     }
 }
 
-static void block_fwht_inplace(float* values, const BlockHadamardPlan& plan) {
-    for (size_t block = 0; block < plan.count; ++block) {
-        normalized_fwht_inplace(
-                values + plan.offsets[block],
-                plan.sizes[block],
-                plan.scales[block]);
+static void normalized_fwht_safe_inplace(
+        float* values,
+        size_t n,
+        float scale,
+        bool may_overflow) {
+    if (!may_overflow) {
+        normalized_fwht_inplace(values, n, scale);
+        return;
     }
+
+    // Scale before any additions on the exceptional path. The usual path
+    // keeps the scale fused into the last butterfly stage.
+    for (size_t j = 0; j < n; ++j) {
+        values[j] *= scale;
+    }
+    fwht_inplace(values, n);
 }
 
 static void check_block_hadamard_metadata_shape(
@@ -706,10 +715,25 @@ void BlockHadamardRotation::apply_noalloc(idx_t n, const float* x, float* xt)
             std::memcpy(aliased_input.data(), input, d * sizeof(float));
             input = aliased_input.data();
         }
-        for (size_t j = 0; j < d; ++j) {
-            output[j] = signs[j] * input[permutation[j]];
+        for (size_t block = 0; block < plan.count; ++block) {
+            const size_t offset = plan.offsets[block];
+            const size_t block_size = plan.sizes[block];
+            const float scale = plan.scales[block];
+            const float unscaled_limit =
+                    std::numeric_limits<float>::max() /
+                    static_cast<float>(block_size);
+            bool may_overflow = false;
+            for (size_t j = offset; j < offset + block_size; ++j) {
+                const float value = signs[j] * input[permutation[j]];
+                output[j] = value;
+                may_overflow |= std::fabs(value) > unscaled_limit;
+            }
+            normalized_fwht_safe_inplace(
+                    output + offset,
+                    block_size,
+                    scale,
+                    may_overflow);
         }
-        block_fwht_inplace(output, plan);
     }
 }
 
@@ -727,8 +751,25 @@ void BlockHadamardRotation::reverse_transform(
     for (idx_t i = 0; i < n; ++i) {
         const float* input = xt + static_cast<size_t>(i) * d;
         float* output = x + static_cast<size_t>(i) * d;
-        std::memcpy(scratch.data(), input, d * sizeof(float));
-        block_fwht_inplace(scratch.data(), plan);
+        for (size_t block = 0; block < plan.count; ++block) {
+            const size_t offset = plan.offsets[block];
+            const size_t block_size = plan.sizes[block];
+            const float scale = plan.scales[block];
+            const float unscaled_limit =
+                    std::numeric_limits<float>::max() /
+                    static_cast<float>(block_size);
+            bool may_overflow = false;
+            for (size_t j = offset; j < offset + block_size; ++j) {
+                const float value = input[j];
+                scratch[j] = value;
+                may_overflow |= std::fabs(value) > unscaled_limit;
+            }
+            normalized_fwht_safe_inplace(
+                    scratch.data() + offset,
+                    block_size,
+                    scale,
+                    may_overflow);
+        }
         for (size_t j = 0; j < d; ++j) {
             output[permutation[j]] = signs[j] * scratch[j];
         }

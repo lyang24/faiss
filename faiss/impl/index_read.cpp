@@ -405,7 +405,10 @@ std::unique_ptr<VectorTransform> read_VectorTransform_up(IOReader* f) {
             vt->d_out >= 0,
             "invalid VectorTransform d_out=%d (must be >= 0)",
             vt->d_out);
-    {
+    // Most transforms may own or derive dense d_in-by-d_out storage. BHRt is
+    // represented by two O(d) vectors, which READVECTOR already bounds, and
+    // is validated against its actual dimensions below.
+    if (h != fourcc("BHRt")) {
         size_t dim_product = mul_no_overflow(
                 vt->d_in, vt->d_out, "VectorTransform d_in * d_out");
         FAISS_THROW_IF_NOT_MSG(

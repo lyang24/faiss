@@ -161,6 +161,47 @@ class TestBlockHadamardRotation(unittest.TestCase):
             faiss.vector_to_array(transform.signs),
         )
 
+    def test_io_budget_uses_linear_metadata_size(self):
+        transform = faiss.BlockHadamardRotation(768, 42)
+        writer = faiss.VectorIOWriter()
+        faiss.write_VectorTransform(transform, writer)
+        serialized = faiss.vector_to_array(writer.data)
+        byte_limit = 1 << 20
+        self.assertLess(serialized.nbytes, byte_limit)
+
+        old_limit = faiss.get_deserialization_vector_byte_limit()
+        try:
+            faiss.set_deserialization_vector_byte_limit(byte_limit)
+            reader = faiss.VectorIOReader()
+            faiss.copy_array_to_vector(serialized, reader.data)
+            restored = faiss.read_VectorTransform(reader)
+        finally:
+            faiss.set_deserialization_vector_byte_limit(old_limit)
+
+        self.assertIsInstance(restored, faiss.BlockHadamardRotation)
+        np.testing.assert_array_equal(
+            faiss.vector_to_array(restored.permutation),
+            faiss.vector_to_array(transform.permutation),
+        )
+        np.testing.assert_array_equal(
+            faiss.vector_to_array(restored.signs),
+            faiss.vector_to_array(transform.signs),
+        )
+
+    def test_normalization_prevents_intermediate_overflow(self):
+        d = 128
+        transform = faiss.BlockHadamardRotation(d, 42)
+        permutation = faiss.vector_to_array(transform.permutation)
+        signs = faiss.vector_to_array(transform.signs)
+        x = np.empty((1, d), dtype="float32")
+        x[0, permutation] = signs * np.float32(1e37)
+
+        actual = transform.apply(x)
+        expected = np.zeros((1, d), dtype="float32")
+        expected[0, 0] = np.float32(np.sqrt(np.float32(d)) * np.float32(1e37))
+        self.assertTrue(np.isfinite(actual).all())
+        np.testing.assert_allclose(actual, expected, rtol=2e-6, atol=0)
+
     def test_rejects_invalid_dimensions_and_metadata(self):
         for d in (0, -1):
             with self.assertRaisesRegex(RuntimeError, "positive dimensions"):

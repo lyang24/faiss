@@ -162,8 +162,13 @@ struct HadamardRotation : VectorTransform {
 struct BlockHadamardRotation : VectorTransform {
     uint32_t seed{12345};
 
-    /// Saved explicitly so serialized transforms do not depend on a platform's
-    /// shuffle implementation.
+    /** Saved explicitly so serialized transforms do not depend on a
+     * platform's shuffle implementation.
+     *
+     * These vectors are authoritative serialized state. Direct mutation is
+     * unsupported: callers must preserve a permutation of [0, d_in) and signs
+     * in {-1, +1}. Serialized metadata is fully validated when it is read.
+     */
     std::vector<int32_t> permutation;
     std::vector<float> signs;
 
