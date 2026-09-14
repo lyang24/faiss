@@ -13,6 +13,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <limits>
 #include <memory>
 
 #include <faiss/IndexPQ.h>
@@ -661,18 +662,60 @@ static size_t largest_power_of_two_not_above(size_t n) {
     return result;
 }
 
-static void block_fwht_inplace(float* values, size_t d) {
+struct BlockHadamardPlan {
+    static constexpr size_t max_blocks = std::numeric_limits<size_t>::digits;
+    size_t offsets[max_blocks];
+    size_t sizes[max_blocks];
+    float scales[max_blocks];
+    size_t count = 0;
+};
+
+static BlockHadamardPlan make_block_hadamard_plan(size_t d) {
+    BlockHadamardPlan plan;
     size_t offset = 0;
     size_t remaining = d;
     while (remaining > 0) {
         const size_t block_size = largest_power_of_two_not_above(remaining);
-        fwht_inplace(values + offset, block_size);
-        const float scale = 1.0f / std::sqrt(static_cast<float>(block_size));
-        for (size_t j = 0; j < block_size; ++j) {
-            values[offset + j] *= scale;
-        }
+        plan.offsets[plan.count] = offset;
+        plan.sizes[plan.count] = block_size;
+        plan.scales[plan.count] =
+                1.0f / std::sqrt(static_cast<float>(block_size));
+        ++plan.count;
         offset += block_size;
         remaining -= block_size;
+    }
+    return plan;
+}
+
+static void normalized_fwht_inplace(float* values, size_t n, float scale) {
+    if (n == 1) {
+        values[0] *= scale;
+        return;
+    }
+    for (size_t step = 1; step < n; step *= 2) {
+        const bool final_stage = step == n / 2;
+        for (size_t base = 0; base < n; base += 2 * step) {
+            for (size_t j = 0; j < step; ++j) {
+                const float first = values[base + j];
+                const float second = values[base + j + step];
+                if (final_stage) {
+                    values[base + j] = (first + second) * scale;
+                    values[base + j + step] = (first - second) * scale;
+                } else {
+                    values[base + j] = first + second;
+                    values[base + j + step] = first - second;
+                }
+            }
+        }
+    }
+}
+
+static void block_fwht_inplace(float* values, const BlockHadamardPlan& plan) {
+    for (size_t block = 0; block < plan.count; ++block) {
+        normalized_fwht_inplace(
+                values + plan.offsets[block],
+                plan.sizes[block],
+                plan.scales[block]);
     }
 }
 
@@ -735,6 +778,7 @@ void BlockHadamardRotation::apply_noalloc(idx_t n, const float* x, float* xt)
     FAISS_THROW_IF_NOT_MSG(n >= 0, "negative vector count");
     check_block_hadamard_metadata_shape(d_in, d_out, permutation, signs);
     const size_t d = static_cast<size_t>(d_in);
+    const BlockHadamardPlan plan = make_block_hadamard_plan(d);
 
     std::vector<float> aliased_input;
     if (x == xt && n > 0) {
@@ -750,7 +794,7 @@ void BlockHadamardRotation::apply_noalloc(idx_t n, const float* x, float* xt)
         for (size_t j = 0; j < d; ++j) {
             output[j] = signs[j] * input[permutation[j]];
         }
-        block_fwht_inplace(output, d);
+        block_fwht_inplace(output, plan);
     }
 }
 
@@ -762,13 +806,14 @@ void BlockHadamardRotation::reverse_transform(
     FAISS_THROW_IF_NOT_MSG(n >= 0, "negative vector count");
     check_block_hadamard_metadata_shape(d_in, d_out, permutation, signs);
     const size_t d = static_cast<size_t>(d_in);
+    const BlockHadamardPlan plan = make_block_hadamard_plan(d);
     std::vector<float> scratch(d);
 
     for (idx_t i = 0; i < n; ++i) {
         const float* input = xt + static_cast<size_t>(i) * d;
         float* output = x + static_cast<size_t>(i) * d;
         std::memcpy(scratch.data(), input, d * sizeof(float));
-        block_fwht_inplace(scratch.data(), d);
+        block_fwht_inplace(scratch.data(), plan);
         for (size_t j = 0; j < d; ++j) {
             output[permutation[j]] = signs[j] * scratch[j];
         }
