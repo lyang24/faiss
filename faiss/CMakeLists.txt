@@ -50,6 +50,7 @@ set(FAISS_SIMD_AVX512_VPOPCNT_SRC
 set(FAISS_SIMD_AVX512_SPR_SRC
   impl/scalar_quantizer/sq-avx512-spr.cpp
   utils/simd_impl/rabitq_integer_adc_avx512.cpp
+  utils/simd_impl/rabitq_packed_adc_avx512.cpp
 )
 set(FAISS_SIMD_NEON_SRC
   impl/fast_scan/impl-neon.cpp
@@ -63,6 +64,7 @@ set(FAISS_SIMD_NEON_SRC
   utils/distances_fused/simdlib_based_neon.cpp
   utils/simd_impl/rabitq_neon.cpp
   utils/simd_impl/rabitq_integer_adc_neon.cpp
+  utils/simd_impl/rabitq_packed_adc_neon.cpp
 )
 set(FAISS_SIMD_SVE_SRC
   impl/pq_code_distance/pq_code_distance-sve.cpp
@@ -171,6 +173,7 @@ set(FAISS_SRC
   impl/AdditiveQuantizer.cpp
   impl/scalar_quantizer/EDENQuantizer.cpp
   impl/RaBitQuantizer.cpp
+  utils/rabitq_packed_adc.cpp
   impl/RaBitQuantizerMultiBit.cpp
   impl/RaBitQUtils.cpp
   impl/ResidualQuantizer.cpp
@@ -384,6 +387,7 @@ set(FAISS_HEADERS
   utils/quantize_lut.h
   utils/rabitq_simd.h
   utils/rabitq_integer_adc.h
+  utils/rabitq_packed_adc.h
   utils/random.h
   utils/sorting.h
   impl/simdlib/simdlib.h
@@ -447,6 +451,7 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "(aarch64|arm64|ARM64)" AND NOT MSVC)
   # Keep optional dot-product instructions isolated in one runtime-gated TU;
   # ordinary NEON builds must remain executable on CPUs without ASIMDDP.
   set_source_files_properties(utils/simd_impl/rabitq_integer_adc_neon.cpp
+    utils/simd_impl/rabitq_packed_adc_neon.cpp
     PROPERTIES COMPILE_OPTIONS "-march=armv8.2-a+dotprod")
 endif()
 
@@ -849,3 +854,10 @@ install(FILES ${PROJECT_BINARY_DIR}/cmake/faiss-config.cmake
 install(EXPORT faiss-targets
   DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/faiss
 )
+
+# Only the packed-code unpacker needs VBMI; do not change flags or dispatch
+# for existing expanded integer ADC kernels. The factory checks VBMI at runtime.
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86_64|amd64|AMD64)" AND NOT MSVC)
+  set_property(SOURCE utils/simd_impl/rabitq_packed_adc_avx512.cpp APPEND
+    PROPERTY COMPILE_OPTIONS "-mavx512vbmi")
+endif()

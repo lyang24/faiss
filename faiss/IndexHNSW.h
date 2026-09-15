@@ -230,8 +230,8 @@ struct IndexHNSWRaBitQ : IndexHNSW {
             uint8_t nb_bits = 1,
             MetricType metric = METRIC_L2);
 
-    /** Select an existing RaBitQ full-code scorer. Expanded modes use the
-     * ordinary HNSW path; packed mode restores the legacy staged policy.
+    /** Select an existing RaBitQ full-code scorer. Expanded modes and
+     * PACKED_INT8 use ordinary HNSW; PACKED restores the legacy staged policy.
      */
     void set_full_code_mode(uint8_t mode);
 

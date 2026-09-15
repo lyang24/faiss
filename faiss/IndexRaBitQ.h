@@ -16,6 +16,8 @@ enum RaBitQFullCodeMode : uint8_t {
     RABITQ_FULL_CODE_PACKED = 0,
     RABITQ_FULL_CODE_EXPANDED = 1,
     RABITQ_FULL_CODE_INT8 = 2,
+    /// Integer query ADC directly over native packed codes; no expanded cache.
+    RABITQ_FULL_CODE_PACKED_INT8 = 3,
 };
 
 struct RaBitQSearchParameters : SearchParameters {
@@ -76,15 +78,21 @@ struct IndexRaBitQ : IndexFlatCodes {
             const uint8_t qb_in,
             bool centered) const;
 
-    /** Select the full-code scorer. Expanded modes support L2 and 2..8 total
-     * RaBitQ bits. They preserve the packed codes and derive a d+8 byte cache
-     * per vector. Calling this method again rebuilds a potentially stale cache.
+    /** Select the full-code scorer. Optional modes support L2 and 2..8 total
+     * RaBitQ bits. EXPANDED and INT8 derive a d+8 byte cache per vector;
+     * PACKED_INT8 uses integer queries without a document cache. Existing
+     * modes are not changed automatically based on dimension or bit width.
+     * Packed SIMD kernels support 2/4/6/8 bits on dot-product ARM and
+     * SPR-dispatched AVX512 CPUs with VBMI; other bit widths/CPUs use a scalar
+     * fallback. INT8 remains available when expanded scoring is faster.
+     * Calling this method again rebuilds a potentially stale expanded cache.
      */
     void set_full_code_mode(uint8_t mode);
 
     size_t expanded_code_size() const;
     void rebuild_expanded_codes();
     bool expanded_integer_uses_native_dotprod() const;
+    bool packed_integer_uses_native_dotprod() const;
 
     // Don't rely on sa_decode(), bcz it is good for IP, but not for L2.
     //   As a result, use get_FlatCodesDistanceComputer() for the search.

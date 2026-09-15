@@ -10,6 +10,7 @@
 #include <faiss/impl/FaissAssert.h>
 #include <faiss/impl/RaBitQUtils.h>
 #include <faiss/impl/ResultHandler.h>
+#include <faiss/utils/rabitq_packed_adc.h>
 #include <memory>
 
 namespace faiss {
@@ -103,6 +104,10 @@ void IndexRaBitQ::sa_decode(idx_t n, const uint8_t* bytes, float* x) const {
 }
 
 FlatCodesDistanceComputer* IndexRaBitQ::get_FlatCodesDistanceComputer() const {
+    if (full_code_mode == RABITQ_FULL_CODE_PACKED_INT8) {
+        return rabitq_packed_adc::get_distance_computer(
+                codes.data(), code_size, d, rabitq.nb_bits, center.data());
+    }
     if (full_code_mode != RABITQ_FULL_CODE_PACKED) {
         FAISS_THROW_IF_NOT_MSG(
                 expanded_codes.size() ==
@@ -125,6 +130,12 @@ size_t IndexRaBitQ::expanded_code_size() const {
 }
 
 void IndexRaBitQ::rebuild_expanded_codes() {
+    if (full_code_mode == RABITQ_FULL_CODE_PACKED_INT8) {
+        // Switching away from an expanded mode must release its allocation,
+        // not merely set its size to zero while retaining the full capacity.
+        std::vector<uint8_t>().swap(expanded_codes);
+        return;
+    }
     if (full_code_mode == RABITQ_FULL_CODE_PACKED) {
         expanded_codes.clear();
         return;
@@ -137,15 +148,16 @@ void IndexRaBitQ::set_full_code_mode(uint8_t mode) {
     FAISS_THROW_IF_NOT_MSG(
             mode == RABITQ_FULL_CODE_PACKED ||
                     mode == RABITQ_FULL_CODE_EXPANDED ||
-                    mode == RABITQ_FULL_CODE_INT8,
+                    mode == RABITQ_FULL_CODE_INT8 ||
+                    mode == RABITQ_FULL_CODE_PACKED_INT8,
             "invalid RaBitQ full-code mode");
     if (mode != RABITQ_FULL_CODE_PACKED) {
         FAISS_THROW_IF_NOT_MSG(
                 metric_type == METRIC_L2,
-                "expanded RaBitQ ADC supports only L2");
+                "full-code RaBitQ ADC supports only L2");
         FAISS_THROW_IF_NOT_MSG(
                 rabitq.nb_bits >= 2 && rabitq.nb_bits <= 8,
-                "expanded RaBitQ ADC requires 2..8 total bits");
+                "full-code RaBitQ ADC requires 2..8 total bits");
     }
     full_code_mode = static_cast<RaBitQFullCodeMode>(mode);
     rebuild_expanded_codes();
@@ -153,6 +165,10 @@ void IndexRaBitQ::set_full_code_mode(uint8_t mode) {
 
 bool IndexRaBitQ::expanded_integer_uses_native_dotprod() const {
     return rabitq.expanded_integer_uses_native_dotprod();
+}
+
+bool IndexRaBitQ::packed_integer_uses_native_dotprod() const {
+    return rabitq_packed_adc::uses_native_dotprod(rabitq.nb_bits);
 }
 
 FlatCodesDistanceComputer* IndexRaBitQ::get_quantized_distance_computer(
